@@ -1,13 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import type { ShopMapPin } from "@localmarket/shared/types";
+import type { ShopMapPin } from "@/lib/types";
 
-interface ShopPopupProps {
-  shop: ShopMapPin;
-}
-
-export function ShopPopup({ shop }: ShopPopupProps) {
+export function ShopPopup({ shop }: { shop: ShopMapPin }) {
   const distanceText =
     shop.distanceMeters < 1000
       ? `${Math.round(shop.distanceMeters)}m`
@@ -17,9 +13,13 @@ export function ShopPopup({ shop }: ShopPopupProps) {
     <div className="w-56 p-3">
       <div className="flex items-center gap-2 mb-2">
         {shop.logoUrl ? (
-          <img src={shop.logoUrl} alt={shop.name} className="w-10 h-10 rounded-full object-cover" />
+          <img
+            src={shop.logoUrl}
+            alt={shop.name}
+            className="w-10 h-10 rounded-full object-cover"
+          />
         ) : (
-          <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center text-sm font-bold text-gray-500">
+          <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center text-sm font-bold text-emerald-700">
             {shop.name.charAt(0)}
           </div>
         )}
@@ -29,15 +29,15 @@ export function ShopPopup({ shop }: ShopPopupProps) {
         </div>
       </div>
 
-      <div className="flex items-center gap-2 mb-3 text-xs text-gray-600">
-        {shop.rating && (
-          <span className="flex items-center gap-0.5">
+      <div className="flex items-center gap-2 mb-3 text-xs">
+        {shop.rating !== null && (
+          <span className="flex items-center gap-0.5 text-gray-600">
             <span className="text-yellow-500">★</span>
             {shop.rating.toFixed(1)}
           </span>
         )}
         <span
-          className={`px-1.5 py-0.5 rounded-full text-xs font-medium ${
+          className={`px-1.5 py-0.5 rounded-full font-medium ${
             shop.isOpen
               ? "bg-green-100 text-green-700"
               : "bg-red-100 text-red-700"

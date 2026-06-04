@@ -1,6 +1,6 @@
 import { create } from "zustand";
-import type { ShopMapPin, MapFilters } from "@localmarket/shared/types";
-import { DEFAULT_SEARCH_RADIUS_KM } from "@localmarket/shared/constants";
+import type { ShopMapPin, MapFilters } from "@/lib/types";
+import { DEFAULT_SEARCH_RADIUS_KM } from "@/lib/constants";
 
 interface MapState {
   shops: ShopMapPin[];

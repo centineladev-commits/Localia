@@ -1,9 +1,9 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback } from "react";
 import Map, { Marker, Popup, NavigationControl } from "react-map-gl";
-import type { ShopMapPin, MapFilters } from "@localmarket/shared/types";
-import { MAP_ZOOM_DEFAULT, SHOP_CATEGORY_COLORS } from "@localmarket/shared/constants";
+import type { ShopMapPin } from "@/lib/types";
+import { MAP_ZOOM_DEFAULT, SHOP_CATEGORY_COLORS } from "@/lib/constants";
 import { useMapStore } from "@/store/map.store";
 import { MapFiltersBar } from "./MapFiltersBar";
 import { ShopPopup } from "./ShopPopup";
@@ -11,7 +11,7 @@ import "mapbox-gl/dist/mapbox-gl.css";
 
 const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN!;
 
-// Madrid como ciudad por defecto hasta que el usuario elija
+// Madrid como ciudad por defecto
 const DEFAULT_VIEWPORT = {
   longitude: -3.7038,
   latitude: 40.4168,
@@ -19,27 +19,25 @@ const DEFAULT_VIEWPORT = {
 };
 
 export function MapView() {
-  const { shops, activeShop, setActiveShop, filters } = useMapStore();
-  const [viewport, setViewport] = useState(DEFAULT_VIEWPORT);
+  const { shops, activeShop, setActiveShop } = useMapStore();
 
-  const handleMarkerClick = useCallback((shop: ShopMapPin) => {
-    setActiveShop(shop);
-  }, [setActiveShop]);
+  const handleMarkerClick = useCallback(
+    (shop: ShopMapPin) => setActiveShop(shop),
+    [setActiveShop]
+  );
 
   return (
     <div className="relative w-full h-full">
-      {/* Filtros flotantes sobre el mapa */}
       <MapFiltersBar />
 
       <Map
         mapboxAccessToken={MAPBOX_TOKEN}
-        initialViewState={viewport}
+        initialViewState={DEFAULT_VIEWPORT}
         style={{ width: "100%", height: "100%" }}
         mapStyle="mapbox://styles/mapbox/streets-v12"
       >
         <NavigationControl position="bottom-right" />
 
-        {/* Pines de los comercios */}
         {shops.map((shop) => (
           <Marker
             key={shop.id}
@@ -55,7 +53,6 @@ export function MapView() {
           </Marker>
         ))}
 
-        {/* Popup al seleccionar un comercio */}
         {activeShop && (
           <Popup
             longitude={activeShop.coordinates.lng}
@@ -72,7 +69,13 @@ export function MapView() {
   );
 }
 
-function ShopMarker({ shop, isActive }: { shop: ShopMapPin; isActive: boolean }) {
+function ShopMarker({
+  shop,
+  isActive,
+}: {
+  shop: ShopMapPin;
+  isActive: boolean;
+}) {
   const color = SHOP_CATEGORY_COLORS[shop.categoryId] ?? SHOP_CATEGORY_COLORS.otros;
 
   return (
