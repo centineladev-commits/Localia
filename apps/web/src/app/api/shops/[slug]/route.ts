@@ -1,45 +1,40 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDb } from "@/lib/db";
-import { sql } from "drizzle-orm";
+import { getAdminClient } from "@/lib/db";
 
-// GET /api/shops/:slug  — comercio con sus productos
+// GET /api/shops/:slug — comercio con sus productos
 export async function GET(
   _req: NextRequest,
   { params }: { params: { slug: string } }
 ) {
   try {
-    const db = getDb();
+    const supabase = getAdminClient();
 
-    const shopResult = await db.execute(sql`
-      SELECT
-        s.*,
-        sc.name  AS category_name,
-        sc.color AS category_color,
-        ST_X(s.location_point::geometry) AS lng,
-        ST_Y(s.location_point::geometry) AS lat
-      FROM shops s
-      LEFT JOIN shop_categories sc ON sc.id = s.category_id
-      WHERE s.slug = ${params.slug} AND s.active = true
-      LIMIT 1
-    `);
+    const { data: shop, error: shopErr } = await supabase
+      .from("shops")
+      .select(`
+        *,
+        shop_categories ( name, color )
+      `)
+      .eq("slug", params.slug)
+      .eq("active", true)
+      .single();
 
-    if (shopResult.rows.length === 0) {
+    if (shopErr || !shop) {
       return NextResponse.json({ error: "Comercio no encontrado" }, { status: 404 });
     }
 
-    const shop = shopResult.rows[0];
+    const { data: products, error: prodErr } = await supabase
+      .from("products")
+      .select("*, product_categories ( name )")
+      .eq("shop_id", shop.id)
+      .eq("active", true)
+      .order("created_at", { ascending: false });
 
-    const productsResult = await db.execute(sql`
-      SELECT p.*, pc.name AS category_name
-      FROM products p
-      LEFT JOIN product_categories pc ON pc.id = p.category_id
-      WHERE p.shop_id = ${shop.id}::uuid AND p.active = true
-      ORDER BY p.created_at DESC
-    `);
+    if (prodErr) throw prodErr;
 
-    return NextResponse.json({ shop, products: productsResult.rows });
-  } catch (err) {
+    return NextResponse.json({ shop, products: products ?? [] });
+  } catch (err: any) {
     console.error("[GET /api/shops/:slug]", err);
-    return NextResponse.json({ error: "Error interno" }, { status: 500 });
+    return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }

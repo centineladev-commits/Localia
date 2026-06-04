@@ -1,24 +1,20 @@
-import postgres from "postgres";
-import { drizzle, type PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import { createClient } from "@supabase/supabase-js";
 
-// Singleton para evitar múltiples pools en hot-reload de Next.js
-let _db: PostgresJsDatabase | null = null;
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const SERVICE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+const ANON_KEY     = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
-export function getDb(): PostgresJsDatabase {
-  if (_db) return _db;
-
-  if (!process.env.DATABASE_URL) {
-    throw new Error(
-      "DATABASE_URL no está definido. Añádelo en apps/web/.env.local"
-    );
+// Cliente admin (server-side) — bypasa RLS, solo en API routes
+export function getAdminClient() {
+  if (!SUPABASE_URL || !SERVICE_KEY) {
+    throw new Error("Faltan NEXT_PUBLIC_SUPABASE_URL o SUPABASE_SERVICE_ROLE_KEY en .env.local");
   }
-
-  const client = postgres(process.env.DATABASE_URL, {
-    max: 5,
-    idle_timeout: 20,
-    connect_timeout: 10,
+  return createClient(SUPABASE_URL, SERVICE_KEY, {
+    auth: { persistSession: false },
   });
+}
 
-  _db = drizzle(client);
-  return _db;
+// Cliente público (client-side) — respeta RLS
+export function getPublicClient() {
+  return createClient(SUPABASE_URL, ANON_KEY);
 }
