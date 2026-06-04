@@ -2,16 +2,21 @@
 
 import { useEffect } from "react";
 import { useMapStore } from "@/store/map.store";
+import { useCityStore } from "@/store/city.store";
 import { DEMO_SHOPS } from "@/lib/demo-data";
 
-// Carga los datos de demo al montar. Cuando la BD esté lista,
-// reemplazar por un fetch a /api/shops?city_id=...
 export function MapInitializer() {
-  const { setShops } = useMapStore();
+  const { setShops, setFilters } = useMapStore();
+  const { activeCity } = useCityStore();
 
   useEffect(() => {
+    // En producción: fetch("/api/shops?city_id=...") según activeCity
+    // De momento cargamos todos los datos de demo
     setShops(DEMO_SHOPS);
-  }, [setShops]);
+    if (activeCity) {
+      setFilters({ cityId: activeCity.id });
+    }
+  }, [activeCity, setShops, setFilters]);
 
   return null;
 }
