@@ -2,156 +2,338 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { loadStripe } from "@stripe/stripe-js";
+import { Elements } from "@stripe/react-stripe-js";
 import { useCartStore } from "@/store/cart.store";
-import { PLATFORM_FEE_PERCENT } from "@/lib/constants";
+import { useAuthStore } from "@/store/auth.store";
+import { FEE_TIERS, getTier, calcFee, calcShipping } from "@/lib/constants";
+import { StripePaymentForm } from "./StripePaymentForm";
+
+const stripePromise = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
+  ? loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY)
+  : null;
 
 export function CheckoutForm() {
   const { items, shop, total, clearCart } = useCartStore();
-  const [deliveryType, setDeliveryType] = useState<"pickup" | "local_delivery">("pickup");
-  const [submitted, setSubmitted] = useState(false);
+  const { user, openAuthModal }           = useAuthStore();
 
-  const subtotal = total();
-  const fee = +(subtotal * (PLATFORM_FEE_PERCENT / 100)).toFixed(2);
-  const grandTotal = +(subtotal + (deliveryType === "local_delivery" ? 2.5 : 0)).toFixed(2);
+  const [deliveryType, setDeliveryType]   = useState<"pickup" | "local_delivery">("pickup");
+  const [address, setAddress]             = useState("");
+  const [step, setStep]                   = useState<"summary" | "payment" | "success">("summary");
+  const [clientSecret, setClientSecret]   = useState<string | null>(null);
+  const [loadingIntent, setLoadingIntent] = useState(false);
+  const [intentError, setIntentError]     = useState<string | null>(null);
+  const [finalTotal, setFinalTotal]       = useState<number | null>(null);
 
-  if (items.length === 0 && !submitted) {
+  const subtotal    = total();
+  const tier        = getTier(subtotal);
+  const shippingFee = calcShipping(subtotal, deliveryType);
+  const grandTotal  = +(subtotal + shippingFee).toFixed(2);
+  const platformFee = calcFee(grandTotal);
+
+  // ─── Carrito vacío ────────────────────────────────────────────
+  if (items.length === 0 && step !== "success") {
     return (
-      <div className="text-center py-20 text-gray-400">
-        <p className="text-5xl mb-4">🛒</p>
-        <p className="text-lg font-medium">No tienes artículos en el carrito</p>
-        <Link href="/" className="mt-4 inline-block text-emerald-600 hover:underline">
-          Volver al mapa
-        </Link>
-      </div>
-    );
-  }
-
-  if (submitted) {
-    return (
-      <div className="text-center py-20">
-        <div className="text-6xl mb-4">🎉</div>
-        <h2 className="text-2xl font-bold text-gray-900">¡Pedido confirmado!</h2>
-        <p className="text-gray-500 mt-2">
-          Recibirás una confirmación cuando {shop?.name} prepare tu pedido.
-        </p>
-        {deliveryType === "pickup" && (
-          <p className="mt-4 p-4 bg-emerald-50 rounded-xl text-emerald-700 text-sm font-medium">
-            📍 Recoge en: {shop?.address}
-          </p>
-        )}
-        <Link
-          href="/"
-          className="mt-6 inline-block px-6 py-3 bg-emerald-600 text-white font-semibold rounded-xl hover:bg-emerald-700 transition-colors"
-        >
-          Seguir comprando
-        </Link>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-5">
-      {/* Resumen del pedido */}
-      <div className="bg-white rounded-2xl shadow-sm p-5">
-        <h2 className="font-bold text-gray-800 mb-4">
-          Pedido en <span className="text-emerald-600">{shop?.name}</span>
-        </h2>
-        <div className="space-y-3">
-          {items.map((item) => (
-            <div key={item.product.id} className="flex items-center gap-3">
-              <img
-                src={item.product.images[0]}
-                alt={item.product.name}
-                className="w-12 h-12 rounded-lg object-cover shrink-0"
-              />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium truncate">{item.product.name}</p>
-                <p className="text-xs text-gray-500">× {item.quantity}</p>
-              </div>
-              <p className="text-sm font-semibold shrink-0">
-                {(item.product.price * item.quantity).toFixed(2)} €
-              </p>
-            </div>
-          ))}
+      <div className="text-center py-20 animate-fade-in">
+        <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+          <svg className="w-10 h-10 text-slate-300" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 3h1.386c.51 0 .955.343 1.087.835l.383 1.437M7.5 14.25a3 3 0 00-3 3h15.75m-12.75-3h11.218c1.121-2.3 2.1-4.684 2.924-7.138a60.114 60.114 0 00-16.536-1.84M7.5 14.25L5.106 5.272M6 20.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm12.75 0a.75.75 0 11-1.5 0 .75.75 0 011.5 0z" />
+          </svg>
         </div>
-        <div className="border-t mt-4 pt-4 space-y-1.5 text-sm">
-          <div className="flex justify-between text-gray-600">
-            <span>Subtotal</span><span>{subtotal.toFixed(2)} €</span>
+        <p className="text-xl font-bold text-slate-700">Tu carrito está vacío</p>
+        <p className="text-slate-400 text-sm mt-1">Añade productos desde el catálogo para continuar</p>
+        <Link href="/" className="mt-6 inline-flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white font-bold rounded-2xl hover:bg-indigo-700 transition-colors">
+          Explorar catálogo
+        </Link>
+      </div>
+    );
+  }
+
+  // ─── Pedido confirmado ─────────────────────────────────────────
+  if (step === "success") {
+    return (
+      <div className="text-center py-20 animate-scale-in">
+        <div className="w-24 h-24 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-5 shadow-lg shadow-emerald-100">
+          <svg className="w-12 h-12 text-emerald-600" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        </div>
+        <h2 className="text-2xl font-black text-slate-900">¡Pedido confirmado!</h2>
+        <p className="text-slate-500 mt-2 text-sm max-w-xs mx-auto">
+          El pago de <strong>{(finalTotal ?? grandTotal).toFixed(2)} €</strong> se ha procesado. Recibirás un email de confirmación en breve.
+        </p>
+        {deliveryType === "pickup" && shop?.address && (
+          <div className="mt-5 inline-flex items-center gap-2 px-5 py-3 bg-emerald-50 rounded-2xl text-emerald-700 text-sm font-semibold border border-emerald-100">
+            📍 Recoge en: {shop.address}
+          </div>
+        )}
+        <div className="mt-6 flex flex-col sm:flex-row gap-3 justify-center">
+          <Link href="/mis-pedidos" className="px-6 py-3 bg-slate-100 text-slate-700 font-bold rounded-2xl hover:bg-slate-200 transition-colors">
+            Ver mis pedidos
+          </Link>
+          <Link href="/" className="px-6 py-3 bg-indigo-600 text-white font-bold rounded-2xl hover:bg-indigo-700 transition-colors">
+            Seguir comprando
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── Paso 1: Resumen + entrega ─────────────────────────────────
+  async function goToPayment() {
+    if (!user) { openAuthModal("login"); return; }
+    if (deliveryType === "local_delivery" && !address.trim()) {
+      alert("Introduce tu dirección de entrega");
+      return;
+    }
+
+    if (!process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY) {
+      clearCart();
+      setStep("success");
+      return;
+    }
+
+    setLoadingIntent(true);
+    setIntentError(null);
+    try {
+      const res = await fetch("/api/payments/create-intent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount:          subtotal,
+          shopId:          shop?.id,
+          userId:          user.id,
+          items:           items.map((i) => ({ id: i.product.id, name: i.product.name, qty: i.quantity, price: i.product.price })),
+          deliveryType,
+          deliveryAddress: address,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.clientSecret) throw new Error(data.error ?? "No se pudo iniciar el pago");
+      setClientSecret(data.clientSecret);
+      if (data.grandTotal) setFinalTotal(data.grandTotal);
+      setStep("payment");
+    } catch (err: any) {
+      setIntentError(err.message);
+    } finally {
+      setLoadingIntent(false);
+    }
+  }
+
+  if (step === "summary") {
+    return (
+      <div className="space-y-4 animate-fade-in">
+        {!user && (
+          <div className="flex items-center gap-3 p-4 bg-amber-50 border border-amber-200 rounded-2xl">
+            <div className="w-9 h-9 bg-amber-100 rounded-xl flex items-center justify-center shrink-0">
+              <svg className="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+              </svg>
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-bold text-amber-800">Inicia sesión para confirmar</p>
+              <p className="text-xs text-amber-600 mt-0.5">Necesitas una cuenta para finalizar tu compra</p>
+            </div>
+            <button onClick={() => openAuthModal("login")} className="px-4 py-2 bg-amber-500 text-white text-xs font-bold rounded-xl hover:bg-amber-600 transition-colors">
+              Entrar
+            </button>
+          </div>
+        )}
+
+        {/* Tarifa activa */}
+        <div className="flex items-center gap-2 px-4 py-2.5 bg-indigo-50 border border-indigo-100 rounded-2xl text-xs text-indigo-700 font-semibold">
+          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 14.25l6-6m4.5-3.493V21.75l-3.75-1.5-3.75 1.5-3.75-1.5-3.75 1.5V4.757c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0111.186 0c1.1.128 1.907 1.077 1.907 2.185z" />
+          </svg>
+          Tarifa activa: <strong>{tier.feePercent}% comisión</strong>
+          {deliveryType === "local_delivery" && tier.shippingFee > 0 && <> · <strong>{tier.shippingFee.toFixed(2)} € envío</strong></>}
+          {deliveryType === "local_delivery" && tier.shippingFee === 0 && <> · <strong>Envío gratis 🎉</strong></>}
+        </div>
+
+        {/* Escalera de tarifas */}
+        <details className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+          <summary className="px-5 py-3 text-xs font-bold text-slate-500 cursor-pointer hover:bg-slate-50 uppercase tracking-wide list-none flex items-center justify-between">
+            <span>Ver escalera de tarifas completa</span>
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+            </svg>
+          </summary>
+          <div className="px-5 pb-4 space-y-1">
+            {FEE_TIERS.map((t, i) => {
+              const active = t === tier;
+              const label = t.max === Infinity
+                ? `+${t.min} €`
+                : `${t.min}–${t.max} €`;
+              return (
+                <div key={i} className={`flex justify-between items-center px-3 py-2 rounded-xl text-xs font-semibold transition-colors ${active ? "bg-indigo-50 text-indigo-700 ring-1 ring-indigo-200" : "text-slate-500"}`}>
+                  <span>{label}</span>
+                  <span>{t.feePercent}% comisión · {t.shippingFee > 0 ? `${t.shippingFee.toFixed(2)} € envío` : "Envío gratis"}</span>
+                </div>
+              );
+            })}
+          </div>
+        </details>
+
+        {/* Resumen del pedido */}
+        <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
+          <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-3">
+            <div className="w-8 h-8 bg-indigo-50 rounded-lg flex items-center justify-center">
+              <svg className="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+              </svg>
+            </div>
+            <h2 className="font-black text-slate-800">Pedido en <span className="text-indigo-600">{shop?.name}</span></h2>
+          </div>
+          <div className="p-5 space-y-3">
+            {items.map((item) => (
+              <div key={item.product.id} className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-xl overflow-hidden bg-slate-100 shrink-0">
+                  {item.product.images[0] ? (
+                    <img src={item.product.images[0]} alt={item.product.name} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-slate-300 text-xl">📦</div>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-slate-800 truncate">{item.product.name}</p>
+                  <p className="text-xs text-slate-400">× {item.quantity} · {item.product.price.toFixed(2)} € c/u</p>
+                </div>
+                <p className="text-sm font-black text-slate-800 shrink-0">{(item.product.price * item.quantity).toFixed(2)} €</p>
+              </div>
+            ))}
+          </div>
+          <div className="px-5 py-4 bg-slate-50 space-y-2 text-sm border-t border-slate-100">
+            <div className="flex justify-between text-slate-500"><span>Subtotal</span><span>{subtotal.toFixed(2)} €</span></div>
+            {shippingFee > 0 && <div className="flex justify-between text-slate-500"><span>Envío local</span><span>{shippingFee.toFixed(2)} €</span></div>}
+            {shippingFee === 0 && deliveryType === "local_delivery" && (
+              <div className="flex justify-between text-emerald-600 font-semibold"><span>Envío local</span><span>¡Gratis!</span></div>
+            )}
+            <div className="flex justify-between font-black text-base text-slate-900 pt-2 border-t border-slate-200">
+              <span>Total</span>
+              <span className="text-indigo-600">{grandTotal.toFixed(2)} €</span>
+            </div>
+            <p className="text-[10px] text-slate-400 text-right">
+              Comisión de plataforma ({tier.feePercent}%): {platformFee.toFixed(2)} €
+            </p>
+          </div>
+        </div>
+
+        {/* Tipo de entrega */}
+        <div className="bg-white rounded-3xl shadow-sm border border-slate-100 p-5">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-8 h-8 bg-indigo-50 rounded-lg flex items-center justify-center">
+              <svg className="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 18.75a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 01-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 00-3.213-9.193 2.056 2.056 0 00-1.58-.86H14.25M16.5 18.75h-2.25m0-11.177v-.958c0-.568-.422-1.048-.987-1.106a48.554 48.554 0 00-10.026 0 1.106 1.106 0 00-.987 1.106v7.635m12-6.677v6.677m0 4.5v-4.5m0 0h-12" />
+              </svg>
+            </div>
+            <h2 className="font-black text-slate-800">Tipo de entrega</h2>
+          </div>
+          <div className="space-y-2">
+            {[
+              { value: "pickup",         title: "Recoger en tienda",  subtitle: shop?.address ?? "En el local", extra: "Gratis" },
+              { value: "local_delivery", title: "Entrega local",       subtitle: "En tu ciudad · mismo día",     extra: tier.shippingFee > 0 ? `${tier.shippingFee.toFixed(2)} €` : "¡Gratis!" },
+            ].map((opt) => (
+              <label key={opt.value} className={`flex items-start gap-3 p-4 rounded-2xl border-2 cursor-pointer transition-all ${deliveryType === opt.value ? "border-indigo-500 bg-indigo-50" : "border-slate-100 hover:border-slate-200"}`}>
+                <input type="radio" name="delivery" value={opt.value}
+                  checked={deliveryType === opt.value as any}
+                  onChange={() => setDeliveryType(opt.value as "pickup" | "local_delivery")}
+                  className="mt-0.5 accent-indigo-600" />
+                <div className="flex-1">
+                  <p className="font-bold text-sm text-slate-800">{opt.title}</p>
+                  <p className="text-xs text-slate-400 mt-0.5">{opt.subtitle}</p>
+                </div>
+                <span className={`text-sm font-black shrink-0 ${deliveryType === opt.value ? "text-indigo-600" : "text-slate-400"}`}>{opt.extra}</span>
+              </label>
+            ))}
           </div>
           {deliveryType === "local_delivery" && (
-            <div className="flex justify-between text-gray-600">
-              <span>Envío local</span><span>2.50 €</span>
+            <div className="mt-3">
+              <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">Dirección de entrega</label>
+              <input
+                type="text"
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+                placeholder="Calle, número, piso..."
+                className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent"
+              />
             </div>
           )}
-          <div className="flex justify-between font-bold text-base mt-1">
-            <span>Total</span><span className="text-emerald-600">{grandTotal.toFixed(2)} €</span>
-          </div>
         </div>
-      </div>
 
-      {/* Tipo de entrega */}
-      <div className="bg-white rounded-2xl shadow-sm p-5">
-        <h2 className="font-bold text-gray-800 mb-3">Tipo de entrega</h2>
-        <div className="space-y-2">
-          <label
-            className={`flex items-start gap-3 p-3 rounded-xl border-2 cursor-pointer transition-colors ${
-              deliveryType === "pickup" ? "border-emerald-500 bg-emerald-50" : "border-gray-200"
-            }`}
-          >
-            <input
-              type="radio"
-              name="delivery"
-              value="pickup"
-              checked={deliveryType === "pickup"}
-              onChange={() => setDeliveryType("pickup")}
-              className="mt-0.5"
-            />
-            <div>
-              <p className="font-semibold text-sm">🏪 Recoger en tienda — Gratis</p>
-              <p className="text-xs text-gray-500 mt-0.5">{shop?.address}</p>
-            </div>
-          </label>
-          <label
-            className={`flex items-start gap-3 p-3 rounded-xl border-2 cursor-pointer transition-colors ${
-              deliveryType === "local_delivery" ? "border-emerald-500 bg-emerald-50" : "border-gray-200"
-            }`}
-          >
-            <input
-              type="radio"
-              name="delivery"
-              value="local_delivery"
-              checked={deliveryType === "local_delivery"}
-              onChange={() => setDeliveryType("local_delivery")}
-              className="mt-0.5"
-            />
-            <div>
-              <p className="font-semibold text-sm">🛵 Entrega local — 2.50 €</p>
-              <p className="text-xs text-gray-500 mt-0.5">En tu ciudad, mismo día</p>
-            </div>
-          </label>
-        </div>
-      </div>
+        {intentError && (
+          <div className="px-4 py-3 bg-red-50 border border-red-100 rounded-2xl text-red-600 text-sm">{intentError}</div>
+        )}
 
-      {/* Pago — placeholder hasta integrar Stripe */}
-      <div className="bg-white rounded-2xl shadow-sm p-5">
-        <h2 className="font-bold text-gray-800 mb-3">Pago</h2>
-        <div className="p-4 bg-gray-50 rounded-xl text-center text-sm text-gray-500">
-          💳 Aquí irá el formulario de Stripe
-          <br />
-          <span className="text-xs">(pendiente de conectar Stripe Connect)</span>
-        </div>
+        <button
+          onClick={goToPayment}
+          disabled={loadingIntent}
+          className="w-full py-4 bg-indigo-600 text-white font-black text-base rounded-3xl hover:bg-indigo-700 active:scale-[0.98] transition-all shadow-xl shadow-indigo-100 disabled:opacity-60 flex items-center justify-center gap-2"
+        >
+          {loadingIntent ? (
+            <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Preparando pago...</>
+          ) : (
+            user ? `Continuar al pago — ${grandTotal.toFixed(2)} €` : "Inicia sesión para continuar"
+          )}
+        </button>
+        <p className="text-xs text-center text-slate-400">
+          Al continuar aceptas los{" "}
+          <Link href="/terminos" className="underline hover:text-indigo-600 transition-colors">términos del servicio</Link>
+        </p>
       </div>
+    );
+  }
 
-      {/* Botón confirmar */}
-      <button
-        onClick={() => { clearCart(); setSubmitted(true); }}
-        className="w-full py-4 bg-emerald-600 text-white font-bold text-lg rounded-2xl hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-200"
-      >
-        Confirmar pedido — {grandTotal.toFixed(2)} €
+  // ─── Paso 2: Formulario de pago Stripe ────────────────────────
+  return (
+    <div className="space-y-4 animate-fade-in">
+      <button onClick={() => setStep("summary")} className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 transition-colors">
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+        </svg>
+        Volver al resumen
       </button>
-      <p className="text-xs text-center text-gray-400">
-        Al confirmar aceptas los términos del servicio
-      </p>
+
+      <div className="bg-indigo-600 rounded-2xl p-5 text-white flex items-center justify-between">
+        <div>
+          <p className="text-indigo-200 text-sm">Total a pagar</p>
+          <p className="text-3xl font-black">{(finalTotal ?? grandTotal).toFixed(2)} €</p>
+        </div>
+        <div className="text-right">
+          <p className="text-indigo-200 text-xs">{shop?.name}</p>
+          <p className="text-indigo-100 text-xs mt-0.5 capitalize">{deliveryType === "pickup" ? "Recogida en tienda" : "Entrega local"}</p>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-3xl shadow-sm border border-slate-100 p-5">
+        <div className="flex items-center gap-3 mb-5">
+          <div className="w-8 h-8 bg-indigo-50 rounded-lg flex items-center justify-center">
+            <svg className="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5z" />
+            </svg>
+          </div>
+          <h2 className="font-black text-slate-800">Datos de pago</h2>
+        </div>
+
+        {stripePromise && clientSecret ? (
+          <Elements
+            stripe={stripePromise}
+            options={{
+              clientSecret,
+              appearance: { theme: "stripe", variables: { colorPrimary: "#4f46e5", borderRadius: "12px", fontFamily: "Inter, system-ui, sans-serif" } },
+            }}
+          >
+            <StripePaymentForm
+              grandTotal={finalTotal ?? grandTotal}
+              onSuccess={() => { clearCart(); setStep("success"); }}
+            />
+          </Elements>
+        ) : (
+          <div className="py-8 text-center text-slate-400">
+            <div className="w-8 h-8 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+            <p className="text-sm">Cargando formulario de pago...</p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

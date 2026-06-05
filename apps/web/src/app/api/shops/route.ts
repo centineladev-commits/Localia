@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
       // Fallback: query sin geoespacial si la función no existe aún
       let query = supabase
         .from("shops")
-        .select("id, name, slug, logo_url, category_id, address, opening_hours, phone, location_point")
+        .select("id, name, slug, logo_url, cover_url, category_id, address, opening_hours, phone, location_point")
         .eq("city_id", cityId)
         .eq("active", true)
         .eq("status", "verified");

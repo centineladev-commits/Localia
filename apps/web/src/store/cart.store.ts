@@ -1,24 +1,23 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import type { DemoProduct, DemoShop } from "@/lib/demo-data";
+import type { Product, Shop } from "@/lib/types";
 
 export interface CartItem {
-  product: DemoProduct;
+  product: Product;
   quantity: number;
 }
 
 interface CartState {
   items: CartItem[];
-  shop: DemoShop | null;       // El carrito es por comercio (una tienda a la vez)
+  shop: Shop | null;
   isOpen: boolean;
 
-  addItem: (product: DemoProduct, shop: DemoShop) => "ok" | "different_shop";
+  addItem: (product: Product, shop: Shop) => "ok" | "different_shop";
   removeItem: (productId: string) => void;
   updateQuantity: (productId: string, quantity: number) => void;
   clearCart: () => void;
   openCart: () => void;
   closeCart: () => void;
-
   total: () => number;
   itemCount: () => number;
 }
@@ -32,20 +31,10 @@ export const useCartStore = create<CartState>()(
 
       addItem: (product, shop) => {
         const state = get();
-        // Si hay productos de otra tienda, bloquear
-        if (state.shop && state.shop.id !== shop.id) {
-          return "different_shop";
-        }
-
+        if (state.shop && state.shop.id !== shop.id) return "different_shop";
         const existing = state.items.find((i) => i.product.id === product.id);
         if (existing) {
-          set({
-            items: state.items.map((i) =>
-              i.product.id === product.id
-                ? { ...i, quantity: i.quantity + 1 }
-                : i
-            ),
-          });
+          set({ items: state.items.map((i) => i.product.id === product.id ? { ...i, quantity: i.quantity + 1 } : i) });
         } else {
           set({ items: [...state.items, { product, quantity: 1 }], shop });
         }
@@ -60,23 +49,16 @@ export const useCartStore = create<CartState>()(
 
       updateQuantity: (productId, quantity) =>
         set((state) => ({
-          items:
-            quantity <= 0
-              ? state.items.filter((i) => i.product.id !== productId)
-              : state.items.map((i) =>
-                  i.product.id === productId ? { ...i, quantity } : i
-                ),
+          items: quantity <= 0
+            ? state.items.filter((i) => i.product.id !== productId)
+            : state.items.map((i) => i.product.id === productId ? { ...i, quantity } : i),
         })),
 
       clearCart: () => set({ items: [], shop: null }),
       openCart: () => set({ isOpen: true }),
       closeCart: () => set({ isOpen: false }),
-
-      total: () =>
-        get().items.reduce((sum, i) => sum + i.product.price * i.quantity, 0),
-
-      itemCount: () =>
-        get().items.reduce((sum, i) => sum + i.quantity, 0),
+      total: () => get().items.reduce((sum, i) => sum + i.product.price * i.quantity, 0),
+      itemCount: () => get().items.reduce((sum, i) => sum + i.quantity, 0),
     }),
     { name: "localmarket-cart" }
   )
