@@ -7,16 +7,12 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "turbo run dev",
-    "build": "turbo run build",
-    "lint": "turbo run lint",
-    "db:generate": "turbo run db:generate",
-    "db:migrate": "turbo run db:migrate",
-    "db:studio": "cd packages/db && npx drizzle-kit studio"
+    "dev": "npm run dev --workspace=apps/web",
+    "build": "npm run build --workspace=apps/web",
+    "lint": "npm run lint --workspace=apps/web"
   },
   "devDependencies": {
     "prettier": "^3.3.0",
-    "turbo": "^2.0.0",
     "typescript": "^5.5.0"
   },
   "packageManager": "npm@11.13.0",
