@@ -43,7 +43,7 @@ export function MapInitializer() {
           setShops(DEMO_SHOPS.map((s) => ({ ...s, coverUrl: s.coverUrl ?? null })));
         }
       })
-      .catch(() => setShops(DEMO_SHOPS))
+      .catch(() => setShops(DEMO_SHOPS.map((s) => ({ ...s, coverUrl: s.coverUrl ?? null }))))
       .finally(() => setLoading(false));
   }, [location, filters.categoryId]);
 
