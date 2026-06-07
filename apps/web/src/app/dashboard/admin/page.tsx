@@ -45,20 +45,37 @@ function isActive(ex: Exemption): boolean {
 // ─────────────────────────────────────────────
 export default function AdminPage() {
   const { user, loading } = useAuthStore();
-  const [tab, setTab]     = useState<"shops" | "exemptions">("shops");
-  const [token, setToken] = useState<string | null>(null);
-
-  const isAdmin = user?.app_metadata?.is_admin === true;
+  const [tab, setTab]         = useState<"shops" | "exemptions">("shops");
+  const [token, setToken]     = useState<string | null>(null);
+  const [isAdmin, setIsAdmin]           = useState(false);
+  const [adminChecked, setAdminChecked] = useState(false);
 
   useEffect(() => {
-    if (user) {
-      getPublicClient().auth.getSession().then(({ data }) => {
-        setToken(data.session?.access_token ?? null);
-      });
+    if (!user) { setAdminChecked(true); return; }
+
+    // Check 1: app_metadata.is_admin (set via Supabase Auth dashboard)
+    if (user?.app_metadata?.is_admin === true) {
+      setIsAdmin(true);
+      setAdminChecked(true);
+    } else {
+      // Check 2: users table role column (fallback for dev / missing metadata)
+      getPublicClient()
+        .from("users")
+        .select("role")
+        .eq("id", user.id)
+        .single()
+        .then(({ data }) => {
+          setIsAdmin(data?.role === "admin");
+          setAdminChecked(true);
+        });
     }
+
+    getPublicClient().auth.getSession().then(({ data }) => {
+      setToken(data.session?.access_token ?? null);
+    });
   }, [user]);
 
-  if (loading) return (
+  if (loading || !adminChecked) return (
     <div className="flex items-center justify-center h-full">
       <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
     </div>
