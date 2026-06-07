@@ -435,6 +435,7 @@ export default function ChatPage() {
     setMobileView("chat");
     setBody("");
     setTyping(false);
+    setSendError(null);
   };
 
   // ---------------------------------------------------------------------------
