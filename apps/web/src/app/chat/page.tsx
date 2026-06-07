@@ -284,6 +284,7 @@ export default function ChatPage() {
   // Input
   const [body, setBody] = useState("");
   const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
 
   // Typing indicator (cosmetic)
   const [typing, setTyping] = useState(false);
@@ -443,12 +444,13 @@ export default function ChatPage() {
   const sendMessage = async () => {
     if (!body.trim() || !activeConv || !user || sending) return;
     const text = body.trim();
+    setSendError(null);
     setBody("");
     setSending(true);
 
     const supabase = getPublicClient();
 
-    const { data: inserted } = await supabase
+    const { data: inserted, error: insertError } = await supabase
       .from("messages")
       .insert({
         conversation_id: activeConv.id,
@@ -459,21 +461,29 @@ export default function ChatPage() {
       .select()
       .single();
 
-    if (inserted) {
-      // Optimistic update (realtime will also fire but we deduplicate)
-      setMessages((prev) => {
-        if (prev.find((m) => m.id === (inserted as Message).id)) return prev;
-        return [...prev, inserted as Message];
-      });
+    if (insertError || !inserted) {
+      // Restore message body so user doesn't lose their text
+      setBody(text);
+      setSendError("No se pudo enviar el mensaje. Inténtalo de nuevo.");
+      setSending(false);
+      return;
     }
 
-    await supabase
+    // Optimistic update — Realtime will also fire but we deduplicate by id
+    setMessages((prev) => {
+      if (prev.find((m) => m.id === (inserted as Message).id)) return prev;
+      return [...prev, inserted as Message];
+    });
+
+    // Update conversation preview (non-blocking, fire-and-forget)
+    supabase
       .from("conversations")
       .update({
         last_message: text,
         last_message_at: new Date().toISOString(),
       })
-      .eq("id", activeConv.id);
+      .eq("id", activeConv.id)
+      .then(() => {});
 
     setSending(false);
     textareaRef.current?.focus();
@@ -743,6 +753,9 @@ export default function ChatPage() {
               <p className="text-[10px] text-gray-400 mt-1.5 text-center select-none">
                 Shift + Enter para nueva linea
               </p>
+              {sendError && (
+                <p className="text-[11px] text-red-500 text-center mt-1 font-medium">{sendError}</p>
+              )}
             </div>
           </>
         )}
