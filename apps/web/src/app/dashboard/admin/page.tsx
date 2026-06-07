@@ -51,7 +51,11 @@ export default function AdminPage() {
   const [adminChecked, setAdminChecked] = useState(false);
 
   useEffect(() => {
-    if (!user) { setAdminChecked(true); return; }
+    setAdminChecked(false);
+    setIsAdmin(false);
+    let cancelled = false;
+
+    if (!user) { setAdminChecked(true); return () => { cancelled = true; }; }
 
     // Check 1: app_metadata.is_admin (set via Supabase Auth dashboard)
     if (user?.app_metadata?.is_admin === true) {
@@ -59,20 +63,29 @@ export default function AdminPage() {
       setAdminChecked(true);
     } else {
       // Check 2: users table role column (fallback for dev / missing metadata)
-      getPublicClient()
-        .from("users")
-        .select("role")
-        .eq("id", user.id)
-        .single()
+      Promise.resolve(
+        getPublicClient()
+          .from("users")
+          .select("role")
+          .eq("id", user.id)
+          .single()
+      )
         .then(({ data }) => {
-          setIsAdmin(data?.role === "admin");
-          setAdminChecked(true);
+          if (!cancelled) {
+            setIsAdmin(data?.role === "admin");
+            setAdminChecked(true);
+          }
+        })
+        .catch(() => {
+          if (!cancelled) setAdminChecked(true);
         });
     }
 
     getPublicClient().auth.getSession().then(({ data }) => {
-      setToken(data.session?.access_token ?? null);
+      if (!cancelled) setToken(data.session?.access_token ?? null);
     });
+
+    return () => { cancelled = true; };
   }, [user]);
 
   if (loading || !adminChecked) return (
