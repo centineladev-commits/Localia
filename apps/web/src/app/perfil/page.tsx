@@ -91,6 +91,7 @@ export default function PerfilPage() {
   const [loading, setLoading] = useState(true);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -121,22 +122,46 @@ export default function PerfilPage() {
   async function handleAvatarFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file || !user) return;
+
+    // Validar tamaño (5 MB máx)
+    if (file.size > 5 * 1024 * 1024) {
+      setUploadError("La foto es demasiado grande. El tamaño máximo es 5 MB.");
+      return;
+    }
+    // Validar tipo
+    if (!file.type.startsWith("image/")) {
+      setUploadError("El archivo debe ser una imagen (JPG, PNG o WEBP).");
+      return;
+    }
+
+    setUploadError(null);
     setUploadingAvatar(true);
     try {
       const supabase = getPublicClient();
-      const ext = file.name.split(".").pop();
+      const ext = file.name.split(".").pop()?.toLowerCase() ?? "jpg";
       const path = `avatars/${user.id}.${ext}`;
-      const { error } = await supabase.storage.from("public-images").upload(path, file, { upsert: true });
-      if (error) throw error;
+      const { error: uploadErr } = await supabase.storage
+        .from("public-images")
+        .upload(path, file, { upsert: true });
+      if (uploadErr) throw uploadErr;
       const { data: urlData } = supabase.storage.from("public-images").getPublicUrl(path);
       const newUrl = urlData.publicUrl;
       setProfile((p) => ({ ...p, avatar_url: newUrl }));
-      // Auto-guardar la URL en BD para que persista sin necesidad de pulsar "Guardar"
-      await supabase.from("users").upsert({ id: user.id, email: user.email!, avatar_url: newUrl, updated_at: new Date().toISOString() });
-    } catch {
-      alert("Error al subir la foto. Asegúrate de que el bucket 'public-images' existe en Supabase Storage.");
+      await supabase.from("users").upsert({
+        id: user.id,
+        email: user.email!,
+        avatar_url: newUrl,
+        updated_at: new Date().toISOString(),
+      });
+    } catch (err: any) {
+      setUploadError(
+        err?.message?.includes("Bucket not found")
+          ? "El bucket 'public-images' no existe en Supabase Storage. Créalo primero."
+          : err?.message ?? "Error al subir la foto. Inténtalo de nuevo."
+      );
     } finally {
       setUploadingAvatar(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }
   }
 
@@ -343,6 +368,9 @@ export default function PerfilPage() {
                 </>
               )}
             </div>
+            {uploadError && (
+              <p className="text-xs text-red-500 mt-2 font-medium">{uploadError}</p>
+            )}
             <div>
               <label className={LABEL}>O pega una URL de imagen</label>
               <input
