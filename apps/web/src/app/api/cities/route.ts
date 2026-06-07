@@ -12,7 +12,14 @@ export async function GET() {
       .order("name");
 
     if (error) throw error;
-    return NextResponse.json({ cities: data ?? [] });
+    return NextResponse.json(
+      { cities: data ?? [] },
+      {
+        headers: {
+          "Cache-Control": "public, max-age=300, stale-while-revalidate=3600",
+        },
+      }
+    );
   } catch (err: any) {
     console.error("[GET /api/cities]", err);
     return NextResponse.json({ error: err.message }, { status: 500 });
