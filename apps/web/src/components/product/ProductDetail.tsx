@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Heart,
   Package,
@@ -33,6 +34,8 @@ export function ProductDetail({ product, shop }: { product: Product; shop: Shop 
   const [reserveNote, setReserveNote]    = useState("");
   const [reserving, setReserving]        = useState(false);
   const [reserveOk, setReserveOk]        = useState(false);
+
+  const router = useRouter();
 
   const { addItem, openCart } = useCartStore();
   const { user, openAuthModal } = useAuthStore();
@@ -113,19 +116,29 @@ export function ProductDetail({ product, shop }: { product: Product; shop: Shop 
   return (
     <div className="max-w-5xl mx-auto px-4 py-8">
 
-      {/* Breadcrumb */}
-      <nav className="flex items-center gap-1.5 text-sm text-gray-400 mb-8">
-        <Link href="/" className="hover:text-gray-600 transition-colors">Catálogo</Link>
-        <ChevronRight className="w-3.5 h-3.5 shrink-0" />
-        <Link
-          href={`/tienda/${shop.slug}`}
-          className="hover:text-gray-600 transition-colors truncate max-w-[160px]"
+      {/* Volver + Breadcrumb */}
+      <div className="flex items-center gap-3 mb-8">
+        <button
+          onClick={() => router.back()}
+          className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-700 transition-colors group shrink-0"
         >
-          {shop.name}
-        </Link>
-        <ChevronRight className="w-3.5 h-3.5 shrink-0" />
-        <span className="text-gray-700 font-medium truncate max-w-[200px]">{product.name}</span>
-      </nav>
+          <ChevronRight className="w-4 h-4 rotate-180 group-hover:-translate-x-0.5 transition-transform" />
+          Volver
+        </button>
+        <span className="text-gray-200 hidden sm:block">·</span>
+        <nav className="hidden sm:flex items-center gap-1.5 text-sm text-gray-400 min-w-0">
+          <Link href="/" className="hover:text-gray-600 transition-colors shrink-0">Catálogo</Link>
+          <ChevronRight className="w-3.5 h-3.5 shrink-0" />
+          <Link
+            href={`/tienda/${shop.slug}`}
+            className="hover:text-gray-600 transition-colors truncate max-w-[160px]"
+          >
+            {shop.name}
+          </Link>
+          <ChevronRight className="w-3.5 h-3.5 shrink-0" />
+          <span className="text-gray-700 font-medium truncate max-w-[200px]">{product.name}</span>
+        </nav>
+      </div>
 
       <div className="grid lg:grid-cols-[1fr_420px] gap-10">
 
