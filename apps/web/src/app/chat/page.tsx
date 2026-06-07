@@ -448,45 +448,47 @@ export default function ChatPage() {
     setBody("");
     setSending(true);
 
-    const supabase = getPublicClient();
+    try {
+      const supabase = getPublicClient();
 
-    const { data: inserted, error: insertError } = await supabase
-      .from("messages")
-      .insert({
-        conversation_id: activeConv.id,
-        sender_id: user.id,
-        sender_type: "user",
-        body: text,
-      })
-      .select()
-      .single();
+      const { data: inserted, error: insertError } = await supabase
+        .from("messages")
+        .insert({
+          conversation_id: activeConv.id,
+          sender_id: user.id,
+          sender_type: "user",
+          body: text,
+        })
+        .select()
+        .single();
 
-    if (insertError || !inserted) {
-      // Restore message body so user doesn't lose their text
-      setBody(text);
-      setSendError("No se pudo enviar el mensaje. Inténtalo de nuevo.");
+      if (insertError || !inserted) {
+        // Restore message body so user doesn't lose their text
+        setBody(text);
+        setSendError("No se pudo enviar el mensaje. Inténtalo de nuevo.");
+        return;
+      }
+
+      // Optimistic update — Realtime will also fire but we deduplicate by id
+      setMessages((prev) => {
+        if (prev.find((m) => m.id === (inserted as Message).id)) return prev;
+        return [...prev, inserted as Message];
+      });
+
+      // Update conversation preview (non-blocking, fire-and-forget)
+      void supabase
+        .from("conversations")
+        .update({
+          last_message: text,
+          last_message_at: new Date().toISOString(),
+        })
+        .eq("id", activeConv.id)
+        .then(() => {});
+
+      textareaRef.current?.focus();
+    } finally {
       setSending(false);
-      return;
     }
-
-    // Optimistic update — Realtime will also fire but we deduplicate by id
-    setMessages((prev) => {
-      if (prev.find((m) => m.id === (inserted as Message).id)) return prev;
-      return [...prev, inserted as Message];
-    });
-
-    // Update conversation preview (non-blocking, fire-and-forget)
-    supabase
-      .from("conversations")
-      .update({
-        last_message: text,
-        last_message_at: new Date().toISOString(),
-      })
-      .eq("id", activeConv.id)
-      .then(() => {});
-
-    setSending(false);
-    textareaRef.current?.focus();
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
