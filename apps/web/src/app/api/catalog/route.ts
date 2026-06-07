@@ -35,10 +35,17 @@ function demoFallback(params: {
   q?: string; category?: string; priceMin?: number; priceMax?: number; sort?: string;
   page: number; limit: number; cityId?: string; national?: boolean;
 }): { products: CatalogProduct[]; total: number } {
-  // In demo mode, label products with the requested city so the UI feels responsive
-  const cityName = params.national
-    ? "Otras ciudades"
-    : (params.cityId ? (DEMO_CITY_NAMES[params.cityId] ?? params.cityId) : "Madrid");
+  // Resolve display name:
+  // - Si cityId es un slug conocido (ej. "madrid") → usa DEMO_CITY_NAMES
+  // - Si cityId es un UUID → UUID_RE ya definido en el fichero, muestra "Tu ciudad"
+  // - Si no hay cityId → "Madrid" como fallback
+  const resolvedCityName = params.cityId
+    ? UUID_RE.test(params.cityId)
+      ? "Tu ciudad"
+      : (DEMO_CITY_NAMES[params.cityId] ?? params.cityId)
+    : "Madrid";
+
+  const cityName = params.national ? "Otras ciudades" : resolvedCityName;
   const cityId   = params.national ? "" : (params.cityId ?? "");
 
   let products: CatalogProduct[] = DEMO_SHOPS.flatMap((shop) =>
@@ -128,9 +135,10 @@ export async function GET(req: NextRequest) {
   const page      = Math.max(1, parseInt(sp.get("page") ?? "1"));
   const limit     = Math.min(40, parseInt(sp.get("limit") ?? "20"));
 
+  let cityId: string | null = null;
   try {
     const supabase = getAdminClient();
-    const cityId   = await resolveCityId(supabase, cityParam);
+    cityId   = await resolveCityId(supabase, cityParam);
 
     let query = buildProductQuery(supabase);
 
@@ -161,7 +169,7 @@ export async function GET(req: NextRequest) {
   } catch {
     const result = demoFallback({
       q: q || undefined, category: category || undefined, priceMin, priceMax, sort, page, limit,
-      cityId: cityParam || undefined, national,
+      cityId: cityId || cityParam || undefined, national,
     });
     return NextResponse.json({ ...result, page, limit });
   }
