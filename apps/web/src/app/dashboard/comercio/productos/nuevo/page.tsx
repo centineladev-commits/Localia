@@ -57,6 +57,12 @@ export default function NuevoProductoPage() {
         return;
       }
 
+      if (!shop.city_id) {
+        setError("Tu comercio no tiene ciudad asignada. Contacta con el equipo de Localia para configurarla antes de publicar productos.");
+        setLoading(false);
+        return;
+      }
+
       const { error: insertError } = await supabase.from("products").insert({
         shop_id:     shop.id,
         city_id:     shop.city_id,
