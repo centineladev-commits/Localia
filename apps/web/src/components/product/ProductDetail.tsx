@@ -119,7 +119,10 @@ export function ProductDetail({ product, shop }: { product: Product; shop: Shop 
       {/* Volver + Breadcrumb */}
       <div className="flex items-center gap-3 mb-8">
         <button
-          onClick={() => router.back()}
+          onClick={() => {
+            if (window.history.length > 1) router.back();
+            else router.push("/");
+          }}
           className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-700 transition-colors group shrink-0"
         >
           <ChevronRight className="w-4 h-4 rotate-180 group-hover:-translate-x-0.5 transition-transform" />
