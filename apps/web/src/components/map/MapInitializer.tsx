@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useMapStore } from "@/store/map.store";
 import { useLocationStore } from "@/store/location.store";
+import { useCityStore } from "@/store/city.store";
 import { DEMO_SHOPS } from "@/lib/demo-data";
 import { SHOP_CATEGORY_COLORS } from "@/lib/constants";
 import type { ShopMapPin } from "@/lib/types";
@@ -10,9 +11,17 @@ import type { ShopMapPin } from "@/lib/types";
 export function MapInitializer() {
   const { setShops, setFilters, setLoading, filters } = useMapStore();
   const { location } = useLocationStore();
+  const { activeCity } = useCityStore();
 
   useEffect(() => {
     if (!location) {
+      setShops(DEMO_SHOPS.map((s) => ({ ...s, coverUrl: s.coverUrl ?? null })));
+      return;
+    }
+
+    // Usar la ciudad activa del store; si no hay, intentar sin city_id (muestra demo)
+    const cityId = activeCity?.id;
+    if (!cityId) {
       setShops(DEMO_SHOPS.map((s) => ({ ...s, coverUrl: s.coverUrl ?? null })));
       return;
     }
@@ -21,7 +30,7 @@ export function MapInitializer() {
       lat: String(location.lat),
       lng: String(location.lng),
       radius_km: "5",
-      city_id: "11111111-0000-0000-0000-000000000001", // Madrid fallback
+      city_id: cityId,
     });
     if (filters.categoryId) params.set("category_id", filters.categoryId);
 
@@ -45,7 +54,7 @@ export function MapInitializer() {
       })
       .catch(() => setShops(DEMO_SHOPS.map((s) => ({ ...s, coverUrl: s.coverUrl ?? null }))))
       .finally(() => setLoading(false));
-  }, [location, filters.categoryId]);
+  }, [location, activeCity?.id, filters.categoryId]);
 
   return null;
 }
