@@ -6,70 +6,7 @@ import { Gift } from "lucide-react";
 import { useAuthStore } from "@/store/auth.store";
 import { getPublicClient } from "@/lib/db";
 
-const STATS = [
-  {
-    label: "Pedidos hoy",
-    value: "3",
-    trend: "+2 vs ayer",
-    trendUp: true,
-    from: "from-blue-500",
-    to: "to-blue-600",
-    lightBg: "bg-blue-50",
-    lightText: "text-blue-600",
-    icon: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 3h1.386c.51 0 .955.343 1.087.835l.383 1.437M7.5 14.25a3 3 0 00-3 3h15.75m-12.75-3h11.218c1.121-2.3 2.1-4.684 2.924-7.138a60.114 60.114 0 00-16.536-1.84M7.5 14.25L5.106 5.272M6 20.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm12.75 0a.75.75 0 11-1.5 0 .75.75 0 011.5 0z" />
-      </svg>
-    ),
-  },
-  {
-    label: "Ingresos del mes",
-    value: "284 €",
-    trend: "+18% este mes",
-    trendUp: true,
-    from: "from-emerald-500",
-    to: "to-emerald-600",
-    lightBg: "bg-emerald-50",
-    lightText: "text-emerald-600",
-    icon: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-      </svg>
-    ),
-  },
-  {
-    label: "Productos activos",
-    value: "8",
-    trend: "2 agotados",
-    trendUp: false,
-    from: "from-violet-500",
-    to: "to-violet-600",
-    lightBg: "bg-violet-50",
-    lightText: "text-violet-600",
-    icon: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-      </svg>
-    ),
-  },
-  {
-    label: "Valoración media",
-    value: "4.8",
-    trend: "12 reseñas",
-    trendUp: true,
-    from: "from-amber-400",
-    to: "to-amber-500",
-    lightBg: "bg-amber-50",
-    lightText: "text-amber-600",
-    icon: (
-      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-        <path fillRule="evenodd" d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.007 5.404.433c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.433 2.082-5.006z" clipRule="evenodd" />
-      </svg>
-    ),
-  },
-];
-
-// Datos del gráfico de barras (últimos 7 días, valores porcentuales de altura)
+// Datos del gráfico de barras (últimos 7 días, decorativo)
 const CHART_BARS = [
   { day: "L", pct: 40, value: "1.2k" },
   { day: "M", pct: 65, value: "2.0k" },
@@ -80,42 +17,225 @@ const CHART_BARS = [
   { day: "D", pct: 45, value: "1.4k" },
 ];
 
-const RECENT_ORDERS = [
-  { id: "#0041", product: "Pan de masa madre × 2", time: "Hace 12 min", status: "pending",   total: "9.00 €" },
-  { id: "#0040", product: "Croissant × 3",          time: "Hace 1h",   status: "ready",     total: "6.60 €" },
-  { id: "#0039", product: "Torta de aceite × 1",    time: "Hace 3h",   status: "delivered", total: "3.80 €" },
-];
-
 const STATUS: Record<string, { label: string; dot: string; cls: string }> = {
   pending:    { label: "Nuevo",      dot: "bg-blue-500",    cls: "bg-blue-50 text-blue-700 ring-1 ring-blue-200"     },
   processing: { label: "Preparando", dot: "bg-amber-500",   cls: "bg-amber-50 text-amber-700 ring-1 ring-amber-200"   },
   ready:      { label: "Listo",      dot: "bg-emerald-500", cls: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200" },
   delivered:  { label: "Entregado",  dot: "bg-slate-400",   cls: "bg-slate-50 text-slate-600 ring-1 ring-slate-200"   },
+  paid:       { label: "Pagado",     dot: "bg-emerald-400", cls: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200" },
+  cancelled:  { label: "Cancelado",  dot: "bg-red-400",     cls: "bg-red-50 text-red-600 ring-1 ring-red-200"         },
 };
 
 interface Exemption { ends_at: string; reason: string | null; }
+
+interface OrderItem { name: string; qty: number; price: number; }
+
+interface RecentOrder {
+  id: string;
+  items: OrderItem[];
+  created_at: string;
+  status: string;
+  total: number;
+}
+
+interface DashStats {
+  pedidos_hoy: number;
+  ingresos_mes: number;
+  productos_activos: number;
+  media_valoracion: number | null;
+  total_resenas: number;
+  pedidos_recientes: RecentOrder[];
+}
+
+function formatRelativeTime(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "Ahora mismo";
+  if (mins < 60) return `Hace ${mins} min`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `Hace ${hours}h`;
+  const days = Math.floor(hours / 24);
+  return `Hace ${days}d`;
+}
+
+function formatOrderItems(items: OrderItem[]): string {
+  if (!items || items.length === 0) return "Sin artículos";
+  return items.map((i) => `${i.name} × ${i.qty}`).join(", ");
+}
 
 export default function DashboardOverview() {
   const { user }    = useAuthStore();
   const name        = user?.user_metadata?.display_name ?? "comerciante";
   const firstName   = name.split(" ")[0];
   const [exemption, setExemption] = useState<Exemption | null>(null);
+  const [stats, setStats] = useState<DashStats | null>(null);
+  const [loading, setLoading] = useState(true);
 
   const hour     = new Date().getHours();
   const greeting = hour < 13 ? "Buenos días" : hour < 20 ? "Buenas tardes" : "Buenas noches";
 
-  // Cargar exención activa
   useEffect(() => {
     if (!user) return;
-    getPublicClient()
-      .from("shops").select("id").eq("owner_user_id", user.id).limit(1).single()
-      .then(({ data: shop }) => {
-        if (!shop) return;
+
+    const supabase = getPublicClient();
+
+    async function loadData() {
+      try {
+        // 1. Obtener el shop del usuario
+        const { data: shop } = await supabase
+          .from("shops")
+          .select("id")
+          .eq("owner_user_id", user!.id)
+          .limit(1)
+          .single();
+
+        if (!shop) {
+          setStats({ pedidos_hoy: 0, ingresos_mes: 0, productos_activos: 0, media_valoracion: null, total_resenas: 0, pedidos_recientes: [] });
+          setLoading(false);
+          return;
+        }
+
+        // Cargar exención activa
         fetch(`/api/my-exemption?shop_id=${shop.id}`)
           .then((r) => r.json())
           .then((d) => setExemption(d.exemption ?? null));
-      });
+
+        // 2. Pedidos de hoy
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+
+        const { count: pedidos_hoy } = await supabase
+          .from("orders")
+          .select("id", { count: "exact", head: true })
+          .eq("shop_id", shop.id)
+          .gte("created_at", todayStart.toISOString());
+
+        // 3. Ingresos del mes (solo pedidos con estado pagado/activo)
+        const monthStart = new Date();
+        monthStart.setDate(1);
+        monthStart.setHours(0, 0, 0, 0);
+
+        const { data: ordersThisMonth } = await supabase
+          .from("orders")
+          .select("total")
+          .eq("shop_id", shop.id)
+          .in("status", ["paid", "processing", "ready", "delivered"])
+          .gte("created_at", monthStart.toISOString());
+
+        const ingresos_mes = (ordersThisMonth ?? []).reduce(
+          (acc, o) => acc + (Number(o.total) || 0),
+          0
+        );
+
+        // 4. Productos activos
+        const { count: productos_activos } = await supabase
+          .from("products")
+          .select("id", { count: "exact", head: true })
+          .eq("shop_id", shop.id)
+          .eq("active", true);
+
+        // 5. Valoración media
+        const { data: reviewsData } = await supabase
+          .from("reviews")
+          .select("rating")
+          .eq("shop_id", shop.id);
+
+        const total_resenas = reviewsData?.length ?? 0;
+        const media_valoracion =
+          total_resenas > 0
+            ? reviewsData!.reduce((acc, r) => acc + (Number(r.rating) || 0), 0) / total_resenas
+            : null;
+
+        // 6. Pedidos recientes (últimos 5)
+        const { data: pedidos_recientes } = await supabase
+          .from("orders")
+          .select("id, items, created_at, status, total")
+          .eq("shop_id", shop.id)
+          .order("created_at", { ascending: false })
+          .limit(5);
+
+        setStats({
+          pedidos_hoy: pedidos_hoy ?? 0,
+          ingresos_mes,
+          productos_activos: productos_activos ?? 0,
+          media_valoracion,
+          total_resenas,
+          pedidos_recientes: (pedidos_recientes ?? []) as RecentOrder[],
+        });
+      } catch {
+        setStats({ pedidos_hoy: 0, ingresos_mes: 0, productos_activos: 0, media_valoracion: null, total_resenas: 0, pedidos_recientes: [] });
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadData();
   }, [user]);
+
+  const dash = stats;
+
+  const STATS_CONFIG = [
+    {
+      label: "Pedidos hoy",
+      value: loading ? "—" : String(dash?.pedidos_hoy ?? 0),
+      trend: loading ? "" : `${dash?.pedidos_hoy ?? 0} pedidos`,
+      trendUp: (dash?.pedidos_hoy ?? 0) > 0,
+      from: "from-blue-500",
+      to: "to-blue-600",
+      lightBg: "bg-blue-50",
+      lightText: "text-blue-600",
+      icon: (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 3h1.386c.51 0 .955.343 1.087.835l.383 1.437M7.5 14.25a3 3 0 00-3 3h15.75m-12.75-3h11.218c1.121-2.3 2.1-4.684 2.924-7.138a60.114 60.114 0 00-16.536-1.84M7.5 14.25L5.106 5.272M6 20.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm12.75 0a.75.75 0 11-1.5 0 .75.75 0 011.5 0z" />
+        </svg>
+      ),
+    },
+    {
+      label: "Ingresos del mes",
+      value: loading ? "—" : `${(dash?.ingresos_mes ?? 0).toFixed(2)} €`,
+      trend: loading ? "" : "este mes",
+      trendUp: (dash?.ingresos_mes ?? 0) > 0,
+      from: "from-emerald-500",
+      to: "to-emerald-600",
+      lightBg: "bg-emerald-50",
+      lightText: "text-emerald-600",
+      icon: (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      ),
+    },
+    {
+      label: "Productos activos",
+      value: loading ? "—" : String(dash?.productos_activos ?? 0),
+      trend: loading ? "" : `${dash?.productos_activos ?? 0} activos`,
+      trendUp: (dash?.productos_activos ?? 0) > 0,
+      from: "from-violet-500",
+      to: "to-violet-600",
+      lightBg: "bg-violet-50",
+      lightText: "text-violet-600",
+      icon: (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+        </svg>
+      ),
+    },
+    {
+      label: "Valoración media",
+      value: loading ? "—" : dash?.media_valoracion != null ? dash.media_valoracion.toFixed(1) : "—",
+      trend: loading ? "" : `${dash?.total_resenas ?? 0} reseñas`,
+      trendUp: (dash?.media_valoracion ?? 0) >= 4,
+      from: "from-amber-400",
+      to: "to-amber-500",
+      lightBg: "bg-amber-50",
+      lightText: "text-amber-600",
+      icon: (
+        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+          <path fillRule="evenodd" d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.007 5.404.433c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.433 2.082-5.006z" clipRule="evenodd" />
+        </svg>
+      ),
+    },
+  ];
 
   return (
     <div className="p-6 max-w-5xl space-y-6">
@@ -154,7 +274,7 @@ export default function DashboardOverview() {
 
       {/* Stats cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {STATS.map((s) => (
+        {STATS_CONFIG.map((s) => (
           <div
             key={s.label}
             className="relative bg-white rounded-2xl p-5 shadow-sm border border-slate-100 overflow-hidden group hover:shadow-md transition-shadow"
@@ -165,25 +285,27 @@ export default function DashboardOverview() {
             <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-3 ${s.lightBg} ${s.lightText}`}>
               {s.icon}
             </div>
-            <p className="text-2xl font-black text-slate-900 tracking-tight">{s.value}</p>
+            <p className={`text-2xl font-black tracking-tight ${loading ? "text-slate-300 animate-pulse" : "text-slate-900"}`}>{s.value}</p>
             <p className="text-xs text-slate-400 mt-0.5 font-medium">{s.label}</p>
-            <div className={`flex items-center gap-1 mt-2 text-xs font-semibold ${s.trendUp ? "text-emerald-600" : "text-amber-500"}`}>
-              {s.trendUp ? (
-                <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 10.5L12 3m0 0l7.5 7.5M12 3v18" />
-                </svg>
-              ) : (
-                <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v6m3-3H9" />
-                </svg>
-              )}
-              {s.trend}
-            </div>
+            {!loading && s.trend && (
+              <div className={`flex items-center gap-1 mt-2 text-xs font-semibold ${s.trendUp ? "text-emerald-600" : "text-amber-500"}`}>
+                {s.trendUp ? (
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 10.5L12 3m0 0l7.5 7.5M12 3v18" />
+                  </svg>
+                ) : (
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v6m3-3H9" />
+                  </svg>
+                )}
+                {s.trend}
+              </div>
+            )}
           </div>
         ))}
       </div>
 
-      {/* Gráfico de actividad semanal (CSS puro, sin librería) */}
+      {/* Gráfico de actividad semanal (CSS puro, sin librería, decorativo) */}
       <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
         <div className="flex items-center justify-between mb-5">
           <div>
@@ -240,28 +362,51 @@ export default function DashboardOverview() {
             </Link>
           </div>
           <div className="divide-y divide-slate-50">
-            {RECENT_ORDERS.map((o, idx) => {
-              const s = STATUS[o.status];
-              return (
-                <div key={o.id} className="flex items-center gap-4 px-5 py-4 hover:bg-slate-50/60 transition-colors">
-                  {/* Número de pedido */}
-                  <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">
-                    <span className="text-xs font-black text-slate-500">#{String(idx + 39).slice(-2)}</span>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-bold text-slate-800 truncate">{o.product}</p>
-                    <p className="text-xs text-slate-400 mt-0.5">{o.id} · {o.time}</p>
+            {loading ? (
+              // Skeleton de carga
+              [1, 2, 3].map((n) => (
+                <div key={n} className="flex items-center gap-4 px-5 py-4">
+                  <div className="w-8 h-8 rounded-lg bg-slate-100 animate-pulse shrink-0" />
+                  <div className="flex-1 space-y-2">
+                    <div className="h-3 bg-slate-100 rounded animate-pulse w-3/4" />
+                    <div className="h-2.5 bg-slate-100 rounded animate-pulse w-1/2" />
                   </div>
                   <div className="flex flex-col items-end gap-1.5 shrink-0">
-                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold ${s.cls}`}>
-                      <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
-                      {s.label}
-                    </span>
-                    <span className="text-sm font-black text-slate-700">{o.total}</span>
+                    <div className="h-5 bg-slate-100 rounded-full animate-pulse w-16" />
+                    <div className="h-3 bg-slate-100 rounded animate-pulse w-12" />
                   </div>
                 </div>
-              );
-            })}
+              ))
+            ) : dash && dash.pedidos_recientes.length > 0 ? (
+              dash.pedidos_recientes.map((o, idx) => {
+                const statusKey = o.status in STATUS ? o.status : "pending";
+                const s = STATUS[statusKey];
+                const shortId = o.id.slice(0, 8).toUpperCase();
+                return (
+                  <div key={o.id} className="flex items-center gap-4 px-5 py-4 hover:bg-slate-50/60 transition-colors">
+                    {/* Número de pedido */}
+                    <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">
+                      <span className="text-xs font-black text-slate-500">{idx + 1}</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-slate-800 truncate">{formatOrderItems(o.items)}</p>
+                      <p className="text-xs text-slate-400 mt-0.5">#{shortId} · {formatRelativeTime(o.created_at)}</p>
+                    </div>
+                    <div className="flex flex-col items-end gap-1.5 shrink-0">
+                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold ${s.cls}`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
+                        {s.label}
+                      </span>
+                      <span className="text-sm font-black text-slate-700">{Number(o.total).toFixed(2)} €</span>
+                    </div>
+                  </div>
+                );
+              })
+            ) : (
+              <div className="px-5 py-8 text-center text-sm text-slate-400">
+                No hay pedidos todavía
+              </div>
+            )}
           </div>
         </div>
 
@@ -301,7 +446,9 @@ export default function DashboardOverview() {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-bold text-blue-800">Gestionar pedidos</p>
-                <p className="text-xs text-blue-600/80">3 pedidos pendientes</p>
+                <p className="text-xs text-blue-600/80">
+                  {loading ? "Cargando..." : `${dash?.pedidos_hoy ?? 0} pedidos hoy`}
+                </p>
               </div>
               <svg className="w-4 h-4 text-blue-400 group-hover:translate-x-0.5 transition-transform" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
@@ -320,7 +467,9 @@ export default function DashboardOverview() {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-bold text-violet-800">Mis productos</p>
-                <p className="text-xs text-violet-600/80">8 activos · 2 agotados</p>
+                <p className="text-xs text-violet-600/80">
+                  {loading ? "Cargando..." : `${dash?.productos_activos ?? 0} activos`}
+                </p>
               </div>
               <svg className="w-4 h-4 text-violet-400 group-hover:translate-x-0.5 transition-transform" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
