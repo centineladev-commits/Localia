@@ -7,6 +7,7 @@ import { LocationModal } from "@/components/location/LocationModal";
 import { CityModal } from "@/components/city/CityModal";
 import { AuthModal } from "@/components/auth/AuthModal";
 import { AuthProvider } from "@/components/auth/AuthProvider";
+import { Analytics } from "@vercel/analytics/next";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -29,6 +30,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <CityModal />
           <AuthModal />
         </AuthProvider>
+        <Analytics />
       </body>
     </html>
   );
