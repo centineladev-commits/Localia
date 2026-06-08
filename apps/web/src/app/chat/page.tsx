@@ -167,12 +167,12 @@ function ConversationItem({
       className={`w-full flex items-center gap-3 px-4 py-3.5 text-left transition-all duration-150 relative ${
         isActive
           ? "bg-indigo-50"
-          : "hover:bg-gray-50/80"
+          : "hover:bg-gray-50 transition-all duration-150"
       }`}
     >
       {/* Indicador activo */}
       {isActive && (
-        <span className="absolute left-0 top-2 bottom-2 w-0.5 bg-indigo-600 rounded-r-full" />
+        <span className="absolute left-0 top-2 bottom-2 w-1 bg-indigo-600 rounded-r-full shadow-sm shadow-indigo-300" />
       )}
 
       {/* Avatar */}
@@ -212,7 +212,7 @@ function ConversationItem({
 
 function MessageBubble({ msg, isOwn }: { msg: Message; isOwn: boolean }) {
   return (
-    <div className={`flex ${isOwn ? "justify-end" : "justify-start"} mb-1.5 group`}>
+    <div className={`flex ${isOwn ? "justify-end" : "justify-start"} mb-1.5 group animate-slide-up`}>
       <div
         className={`max-w-[78%] sm:max-w-[65%] px-4 py-2.5 text-sm leading-relaxed ${
           isOwn
@@ -726,7 +726,7 @@ export default function ChatPage() {
 
             {/* ---- Input bar ---- */}
             <div className="px-4 sm:px-5 py-3.5 bg-white border-t border-gray-100">
-              <div className="flex items-end gap-2.5 bg-gray-50 border border-gray-200 rounded-2xl px-3 py-2.5 focus-within:border-indigo-400 focus-within:ring-2 focus-within:ring-indigo-100 transition-all">
+              <div className="flex items-end gap-2.5 bg-gray-50 border border-gray-200 rounded-2xl px-3 py-2.5 focus-within:border-indigo-400/60 focus-within:ring-2 focus-within:ring-indigo-100/80 focus-within:bg-white transition-all duration-200">
                 <textarea
                   ref={textareaRef}
                   value={body}
@@ -741,7 +741,7 @@ export default function ChatPage() {
                   disabled={!body.trim() || sending}
                   className={`p-2 rounded-xl transition-all shrink-0 ${
                     body.trim() && !sending
-                      ? "bg-indigo-600 text-white hover:bg-indigo-700 active:scale-95 shadow-md shadow-indigo-200"
+                      ? "bg-indigo-600 text-white hover:bg-indigo-700 active:scale-95 shadow-lg shadow-indigo-200/60 hover:shadow-xl hover:shadow-indigo-200/80"
                       : "bg-gray-200 text-gray-400 cursor-not-allowed"
                   }`}
                   aria-label="Enviar mensaje"

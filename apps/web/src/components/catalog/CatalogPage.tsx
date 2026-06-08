@@ -15,13 +15,13 @@ const LIMIT = 20;
 
 function Skeleton() {
   return (
-    <div className="bg-white rounded-2xl overflow-hidden border border-slate-100 animate-pulse">
-      <div className="aspect-square bg-slate-100" />
-      <div className="p-3 border-l-[3px] border-slate-100 space-y-2.5">
-        <div className="h-3.5 bg-slate-100 rounded-full w-4/5" />
-        <div className="h-3 bg-slate-100 rounded-full w-2/5" />
-        <div className="h-5 bg-slate-100 rounded-full w-1/3" />
-        <div className="h-3 bg-slate-100 rounded-full w-3/5" />
+    <div className="bg-white rounded-2xl overflow-hidden border border-slate-100">
+      <div className="aspect-square animate-shimmer" />
+      <div className="p-3 space-y-2.5">
+        <div className="h-3.5 animate-shimmer rounded-full w-4/5" />
+        <div className="h-3 animate-shimmer rounded-full w-2/5" />
+        <div className="h-5 animate-shimmer rounded-full w-1/3" />
+        <div className="h-3 animate-shimmer rounded-full w-3/5" />
       </div>
     </div>
   );
@@ -195,7 +195,7 @@ export function CatalogPage() {
               onChange={handleSearchInput}
               onBlur={() => setTimeout(() => setSearchOpen(false), 200)}
               onFocus={() => searchData && setSearchOpen(true)}
-              className="w-full pl-10 pr-4 py-2.5 bg-slate-100/80 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:bg-white transition-all placeholder:text-slate-400"
+              className="w-full pl-10 pr-4 py-2.5 bg-slate-100/80 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:bg-white focus:shadow-lg focus:shadow-indigo-100/50 transition-all placeholder:text-slate-400"
             />
             {searchOpen && searchData && (
               <SearchResults data={searchData} query={inputRef.current?.value ?? ""} />
@@ -205,7 +205,7 @@ export function CatalogPage() {
           {/* Ciudad activa */}
           <button
             onClick={openCityModal}
-            className="flex items-center gap-1.5 px-3.5 py-2.5 bg-slate-100/80 rounded-full text-sm font-semibold text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition-all shrink-0 whitespace-nowrap group"
+            className="flex items-center gap-1.5 px-3.5 py-2.5 bg-slate-100/80 rounded-full text-sm font-semibold text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 hover:shadow-sm hover:shadow-indigo-100 active:scale-95 transition-all duration-200 shrink-0 whitespace-nowrap group"
           >
             <MapPin className="w-4 h-4 text-indigo-500 group-hover:scale-110 transition-transform shrink-0" />
             <span className="max-w-[90px] truncate">{cityLabel ?? "Ciudad"}</span>
@@ -235,7 +235,15 @@ export function CatalogPage() {
           ) : (
             <>
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
-                {local.products.map((p) => <ProductCard key={p.id} product={p} />)}
+                {local.products.map((p, i) => (
+                  <div
+                    key={p.id}
+                    className="animate-slide-up"
+                    style={{ animationDelay: `${Math.min(i * 40, 400)}ms`, animationFillMode: 'both' }}
+                  >
+                    <ProductCard product={p} />
+                  </div>
+                ))}
               </div>
 
               {hasMore && (
@@ -243,7 +251,7 @@ export function CatalogPage() {
                   <button
                     onClick={loadMore}
                     disabled={loadingMore}
-                    className="btn-secondary disabled:opacity-60 disabled:cursor-not-allowed px-8 py-3"
+                    className="btn-secondary disabled:opacity-60 disabled:cursor-not-allowed px-8 py-3 hover:shadow-md hover:border-slate-300 transition-all duration-200"
                   >
                     {loadingMore ? (
                       <span className="flex items-center gap-2">

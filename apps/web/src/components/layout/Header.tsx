@@ -60,11 +60,11 @@ export function Header() {
       <div className="max-w-7xl mx-auto px-4 h-16 flex items-center gap-4">
 
         {/* Logo */}
-        <Link href="/" className="flex items-center gap-2 shrink-0">
-          <div className="w-7 h-7 bg-indigo-600 rounded-lg flex items-center justify-center">
+        <Link href="/" className="flex items-center gap-2 shrink-0 group">
+          <div className="w-7 h-7 bg-indigo-600 rounded-lg flex items-center justify-center group-hover:rotate-6 transition-transform duration-300 ease-out">
             <ShoppingBag className="w-4 h-4 text-white" />
           </div>
-          <span className="text-xl font-black tracking-tight text-indigo-600">Localia</span>
+          <span className="text-xl font-black tracking-tight text-indigo-600 group-hover:text-indigo-700 transition-colors">Localia</span>
         </Link>
 
         {/* Nav */}
@@ -73,10 +73,10 @@ export function Header() {
             <Link
               key={href}
               href={href}
-              className={`px-3.5 py-2 rounded-full font-semibold transition-colors ${
+              className={`px-3.5 py-2 rounded-full font-semibold transition-all duration-200 ${
                 pathname === href
-                  ? "bg-indigo-600 text-white shadow-sm"
-                  : "text-slate-500 hover:text-slate-900 hover:bg-slate-100"
+                  ? "bg-indigo-600 text-white shadow-sm shadow-indigo-200"
+                  : "text-slate-500 hover:text-slate-900 hover:bg-slate-100 hover:scale-[1.02] active:scale-[0.98]"
               }`}
             >
               {label}
@@ -93,7 +93,7 @@ export function Header() {
           {!loading && (
             user ? (
               <div className="relative group">
-                <button className="flex items-center gap-2 pl-1 pr-3 py-1.5 rounded-full hover:bg-slate-100 transition-colors border border-slate-200">
+                <button className="flex items-center gap-2 pl-1 pr-3 py-1.5 rounded-full hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:ring-offset-1 transition-all duration-200 border border-slate-200 hover:border-slate-300">
                   <div className="w-7 h-7 rounded-full bg-indigo-600 flex items-center justify-center text-white text-[10px] font-black overflow-hidden">
                     {avatarUrl ? (
                       <img
@@ -109,7 +109,7 @@ export function Header() {
                   </span>
                 </button>
 
-                <div className="absolute right-0 top-full mt-2 w-52 bg-white rounded-2xl shadow-xl border border-slate-100 overflow-hidden opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 animate-scale-in">
+                <div className="absolute right-0 top-full mt-2 w-52 bg-white rounded-2xl shadow-2xl shadow-slate-200/80 border border-slate-100/80 overflow-hidden opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 animate-pop-in">
                   <div className="px-4 py-3 border-b border-slate-100">
                     <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Cuenta</p>
                     <p className="text-sm font-bold text-slate-800 mt-0.5 truncate">{user.email}</p>
@@ -119,7 +119,7 @@ export function Header() {
                     <Link
                       key={href}
                       href={href}
-                      className="flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+                      className="flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 hover:text-indigo-600 hover:translate-x-0.5 transition-all duration-150"
                     >
                       <Icon className="w-4 h-4 text-slate-400 shrink-0" />
                       {label}
@@ -139,13 +139,13 @@ export function Header() {
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => openAuthModal("login")}
-                  className="text-sm font-semibold text-slate-700 px-3.5 py-2 rounded-full hover:bg-slate-100 transition-colors"
+                  className="text-sm font-semibold text-slate-700 px-3.5 py-2 rounded-full hover:bg-slate-100 active:scale-95 transition-all duration-200"
                 >
                   Entrar
                 </button>
                 <button
                   onClick={() => openAuthModal("register")}
-                  className="hidden sm:block text-sm font-bold text-white bg-indigo-600 px-4 py-2 rounded-full hover:bg-indigo-700 transition-colors shadow-sm"
+                  className="hidden sm:block text-sm font-bold text-white bg-indigo-600 px-4 py-2 rounded-full hover:bg-indigo-700 active:scale-95 hover:shadow-md hover:shadow-indigo-200/50 transition-all duration-200 shadow-sm"
                 >
                   Registro
                 </button>

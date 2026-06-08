@@ -173,7 +173,7 @@ function ShopsTab({ userId }: { userId: string }) {
           { label: "Pendientes de revisión",value: pending.length,         borderClass: "border-amber-100",   iconColor: "text-amber-500",   bgClass: "bg-amber-50" },
           { label: "Aprobadas hoy",         value: approvedToday.length,   borderClass: "border-emerald-100", iconColor: "text-emerald-500", bgClass: "bg-emerald-50" },
         ].map(({ label, value, borderClass, iconColor, bgClass }) => (
-          <div key={label} className={`bg-white rounded-2xl border ${borderClass} shadow-sm p-4`}>
+          <div key={label} className={`bg-white rounded-2xl border ${borderClass} shadow-sm p-4 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 cursor-default`}>
             <p className="text-2xl font-bold text-slate-900">{value}</p>
             <p className="text-xs text-slate-400 mt-0.5">{label}</p>
           </div>
@@ -185,7 +185,7 @@ function ShopsTab({ userId }: { userId: string }) {
         {(["pending", "approved", "all"] as const).map((f) => (
           <button key={f} onClick={() => setFilter(f)}
             className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
-              filter === f ? "bg-indigo-600 text-white shadow-sm" : "bg-white text-slate-600 hover:bg-slate-50 border border-slate-200"
+              filter === f ? "bg-indigo-600 text-white shadow-sm shadow-indigo-200" : "bg-white text-slate-600 hover:bg-slate-50 hover:shadow-sm border border-slate-200 transition-all duration-150"
             }`}>
             {FILTER_LABELS[f]}
             <span className={`text-xs font-bold px-1.5 py-0.5 rounded-md ${filter === f ? "bg-white/20 text-white" : "bg-slate-100 text-slate-500"}`}>
@@ -231,7 +231,7 @@ function ShopsTab({ userId }: { userId: string }) {
             const color    = nameToColor(r.business_name ?? r.email ?? "?");
             const date     = new Date(r.updated_at).toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" });
             return (
-              <div key={r.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 flex items-start gap-4">
+              <div key={r.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 flex items-start gap-4 hover:border-slate-200 hover:shadow-md transition-all duration-200">
                 <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-lg font-bold shrink-0 ${color.bg} ${color.text}`}>
                   {initials}
                 </div>
@@ -250,11 +250,11 @@ function ShopsTab({ userId }: { userId: string }) {
                 {status === "pending" && (
                   <div className="flex flex-col gap-2 shrink-0">
                     <button onClick={() => setConfirming({ id: r.id, approve: true })}
-                      className="px-4 py-2 bg-emerald-600 text-white text-sm font-semibold rounded-xl hover:bg-emerald-700 transition-colors">
+                      className="px-4 py-2 bg-emerald-600 text-white text-sm font-semibold rounded-xl hover:bg-emerald-700 active:scale-95 transition-all duration-150">
                       Aprobar
                     </button>
                     <button onClick={() => setConfirming({ id: r.id, approve: false })}
-                      className="px-4 py-2 bg-white text-red-500 text-sm font-semibold rounded-xl hover:bg-red-50 border border-red-100 transition-colors">
+                      className="px-4 py-2 bg-white text-red-500 text-sm font-semibold rounded-xl hover:bg-red-50 border border-red-100 transition-all duration-150">
                       Rechazar
                     </button>
                   </div>

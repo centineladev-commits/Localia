@@ -623,7 +623,7 @@ export default function PerfilPage() {
             <button
               type="submit"
               disabled={saving}
-              className="flex-1 py-3 font-bold rounded-xl text-sm transition-all shadow-md bg-indigo-600 text-white hover:bg-indigo-700 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
+              className="flex-1 py-3 font-bold rounded-xl text-sm transition-all duration-200 shadow-md bg-indigo-600 text-white hover:bg-indigo-700 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
             >
               {saving ? (
                 <span className="flex items-center justify-center gap-2">
