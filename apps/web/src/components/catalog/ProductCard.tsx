@@ -85,15 +85,6 @@ export function ProductCard({ product }: { product: CatalogProduct }) {
             <span className="truncate font-medium text-slate-500">{product.shopName}</span>
           </div>
 
-          {/* Botón reveal en hover */}
-          <div className="mt-2.5 overflow-hidden max-h-0 group-hover:max-h-10 transition-all duration-300 ease-out">
-            <button
-              className="w-full py-1.5 text-xs font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors"
-              onClick={(e) => { e.preventDefault(); }}
-            >
-              Ver producto
-            </button>
-          </div>
         </div>
       </div>
     </Link>
