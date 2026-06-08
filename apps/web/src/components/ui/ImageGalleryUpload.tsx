@@ -19,8 +19,25 @@ export function ImageGalleryUpload({ userId, images, onChange, maxImages = 6 }: 
 
   async function uploadFiles(files: FileList | File[]) {
     const remaining = maxImages - images.length;
-    const toUpload  = Array.from(files).slice(0, remaining);
-    if (toUpload.length === 0) return;
+    const candidates = Array.from(files).slice(0, remaining);
+    if (candidates.length === 0) return;
+
+    // Client-side validation: MIME type + max size (5 MB per image)
+    const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif", "image/avif"]);
+    const MAX_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
+
+    const toUpload: File[] = [];
+    for (const file of candidates) {
+      if (!ALLOWED_TYPES.has(file.type)) {
+        setError(`Formato no permitido: ${file.name}. Usa JPG, PNG, WebP o GIF.`);
+        return;
+      }
+      if (file.size > MAX_SIZE_BYTES) {
+        setError(`La imagen "${file.name}" supera los 5 MB permitidos.`);
+        return;
+      }
+      toUpload.push(file);
+    }
 
     setUploading(true);
     setError(null);
@@ -30,11 +47,19 @@ export function ImageGalleryUpload({ userId, images, onChange, maxImages = 6 }: 
 
     for (const file of toUpload) {
       try {
-        const ext  = file.name.split(".").pop() ?? "jpg";
+        // Use the actual MIME extension, not the filename extension (prevents extension spoofing)
+        const mimeToExt: Record<string, string> = {
+          "image/jpeg": "jpg",
+          "image/png":  "png",
+          "image/webp": "webp",
+          "image/gif":  "gif",
+          "image/avif": "avif",
+        };
+        const ext  = mimeToExt[file.type] ?? "jpg";
         const path = `products/${userId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
         const { error: upErr } = await supabase.storage
           .from("public-images")
-          .upload(path, file, { upsert: false });
+          .upload(path, file, { upsert: false, contentType: file.type });
         if (upErr) throw upErr;
         const { data } = supabase.storage.from("public-images").getPublicUrl(path);
         urls.push(data.publicUrl);

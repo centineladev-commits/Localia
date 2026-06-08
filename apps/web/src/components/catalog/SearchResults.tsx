@@ -20,7 +20,7 @@ function ShopCard({ shop }: { shop: SearchResponse["shops"][number] }) {
         style={{ backgroundColor: shop.categoryColor }}
       >
         {shop.logoUrl ? (
-          <img src={shop.logoUrl} alt={shop.name} className="w-full h-full object-cover" />
+          <img src={shop.logoUrl} alt={shop.name} loading="lazy" decoding="async" className="w-full h-full object-cover" />
         ) : (
           shop.name.charAt(0).toUpperCase()
         )}
@@ -45,7 +45,7 @@ function ProductCard({ product }: { product: SearchResponse["products"][number] 
     >
       <div className="w-14 h-14 rounded-xl overflow-hidden bg-slate-50 shrink-0 border border-slate-100">
         {product.images[0] ? (
-          <img src={product.images[0]} alt={product.name} className="w-full h-full object-cover" />
+          <img src={product.images[0]} alt={product.name} loading="lazy" decoding="async" className="w-full h-full object-cover" />
         ) : (
           <div className="w-full h-full flex items-center justify-center">
             <Package className="w-5 h-5 text-slate-200" />

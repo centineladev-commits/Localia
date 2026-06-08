@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
+import { isRateLimited, escapeHtml } from "@/lib/auth-server";
 
 export const dynamic = "force-dynamic";
 
@@ -7,10 +8,24 @@ const resend = process.env.RESEND_API_KEY
   ? new Resend(process.env.RESEND_API_KEY)
   : null;
 
-const FROM = "Localia <hello@localia.es>";
-const CONTACT_EMAIL = "hello@localia.es";
+const FROM           = "Localia <hello@localia.es>";
+const CONTACT_EMAIL  = "hello@localia.es";
+const EMAIL_REGEX    = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export async function POST(req: NextRequest) {
+  // Rate limit: 3 submissions per minute per IP
+  const ip =
+    req.headers.get("x-forwarded-for")?.split(",")[0].trim() ??
+    req.headers.get("x-real-ip") ??
+    "unknown";
+
+  if (isRateLimited(ip, 3, 60_000)) {
+    return NextResponse.json(
+      { error: "Demasiadas solicitudes. Espera un momento e inténtalo de nuevo." },
+      { status: 429 }
+    );
+  }
+
   try {
     const body = await req.json();
     const { name, email, subject, message } = body as {
@@ -24,17 +39,32 @@ export async function POST(req: NextRequest) {
     if (!name?.trim()) {
       return NextResponse.json({ error: "El nombre es obligatorio." }, { status: 400 });
     }
+    if (name.trim().length > 100) {
+      return NextResponse.json({ error: "El nombre es demasiado largo." }, { status: 400 });
+    }
     if (!email?.trim()) {
       return NextResponse.json({ error: "El correo electrónico es obligatorio." }, { status: 400 });
+    }
+    if (!EMAIL_REGEX.test(email.trim())) {
+      return NextResponse.json({ error: "El formato del correo no es válido." }, { status: 400 });
     }
     if (!message?.trim()) {
       return NextResponse.json({ error: "El mensaje es obligatorio." }, { status: 400 });
     }
+    if (message.trim().length > 5000) {
+      return NextResponse.json({ error: "El mensaje no puede superar los 5000 caracteres." }, { status: 400 });
+    }
 
-    const subjectLabel = subject?.trim() || "Sin asunto";
-    const trimmedName = name.trim();
-    const trimmedEmail = email.trim().toLowerCase();
+    const subjectLabel   = (subject?.trim() || "Sin asunto").slice(0, 200);
+    const trimmedName    = name.trim();
+    const trimmedEmail   = email.trim().toLowerCase();
     const trimmedMessage = message.trim();
+
+    // Escape user content before embedding in HTML email to prevent HTML injection
+    const safeName    = escapeHtml(trimmedName);
+    const safeEmail   = escapeHtml(trimmedEmail);
+    const safeSubject = escapeHtml(subjectLabel);
+    const safeMessage = escapeHtml(trimmedMessage);
 
     // Build HTML for internal notification email
     const internalHtml = `
@@ -50,20 +80,20 @@ export async function POST(req: NextRequest) {
       <table style="width:100%;border-collapse:collapse">
         <tr>
           <td style="padding:8px 0;font-size:13px;font-weight:700;color:#6b7280;width:100px;vertical-align:top">Nombre</td>
-          <td style="padding:8px 0;font-size:14px;color:#111827">${trimmedName}</td>
+          <td style="padding:8px 0;font-size:14px;color:#111827">${safeName}</td>
         </tr>
         <tr>
           <td style="padding:8px 0;font-size:13px;font-weight:700;color:#6b7280;vertical-align:top">Email</td>
-          <td style="padding:8px 0;font-size:14px;color:#4f46e5"><a href="mailto:${trimmedEmail}" style="color:#4f46e5">${trimmedEmail}</a></td>
+          <td style="padding:8px 0;font-size:14px;color:#4f46e5"><a href="mailto:${safeEmail}" style="color:#4f46e5">${safeEmail}</a></td>
         </tr>
         <tr>
           <td style="padding:8px 0;font-size:13px;font-weight:700;color:#6b7280;vertical-align:top">Asunto</td>
-          <td style="padding:8px 0;font-size:14px;color:#111827">${subjectLabel}</td>
+          <td style="padding:8px 0;font-size:14px;color:#111827">${safeSubject}</td>
         </tr>
       </table>
       <div style="margin-top:16px;background:#f9fafb;border-radius:10px;padding:16px">
         <p style="margin:0 0 8px;font-size:11px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:.05em">Mensaje</p>
-        <p style="margin:0;font-size:14px;color:#374151;line-height:1.6;white-space:pre-wrap">${trimmedMessage}</p>
+        <p style="margin:0;font-size:14px;color:#374151;line-height:1.6;white-space:pre-wrap">${safeMessage}</p>
       </div>
     </div>
     <div style="background:#f9fafb;padding:16px 32px;border-top:1px solid #f0f0f0;text-align:center">
@@ -85,13 +115,13 @@ export async function POST(req: NextRequest) {
       <p style="margin:8px 0 0;font-size:14px;color:#c7d2fe">El mercado local a tu alcance</p>
     </div>
     <div style="padding:28px 32px">
-      <p style="font-size:17px;font-weight:700;color:#111827;margin:0 0 12px">Hola, ${trimmedName}.</p>
+      <p style="font-size:17px;font-weight:700;color:#111827;margin:0 0 12px">Hola, ${safeName}.</p>
       <p style="font-size:14px;color:#374151;line-height:1.6;margin:0 0 16px">
         Hemos recibido tu mensaje y te responderemos en menos de <strong>48 horas laborables</strong>.
       </p>
       <div style="background:#f9fafb;border-radius:10px;padding:16px;margin-bottom:20px">
         <p style="margin:0 0 6px;font-size:11px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:.05em">Tu mensaje</p>
-        <p style="margin:0;font-size:14px;color:#374151;line-height:1.6;white-space:pre-wrap">${trimmedMessage}</p>
+        <p style="margin:0;font-size:14px;color:#374151;line-height:1.6;white-space:pre-wrap">${safeMessage}</p>
       </div>
       <p style="font-size:14px;color:#6b7280;margin:0">
         Si tienes alguna pregunta urgente, puedes escribirnos directamente a
@@ -118,18 +148,18 @@ export async function POST(req: NextRequest) {
     await Promise.allSettled([
       // Internal notification to the Localia team
       resend.emails.send({
-        from: FROM,
-        to: CONTACT_EMAIL,
+        from:    FROM,
+        to:      CONTACT_EMAIL,
         replyTo: trimmedEmail,
         subject: `Contacto: ${subjectLabel} — ${trimmedName}`,
-        html: internalHtml,
+        html:    internalHtml,
       }),
       // Confirmation to the user
       resend.emails.send({
-        from: FROM,
-        to: trimmedEmail,
+        from:    FROM,
+        to:      trimmedEmail,
         subject: "Hemos recibido tu mensaje — Localia",
-        html: confirmationHtml,
+        html:    confirmationHtml,
       }),
     ]);
 

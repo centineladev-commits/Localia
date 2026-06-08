@@ -8,6 +8,16 @@ import { useCartStore } from "@/store/cart.store";
 import { useAuthStore } from "@/store/auth.store";
 import { FEE_TIERS, getTier, calcFee, calcShipping } from "@/lib/constants";
 import { StripePaymentForm } from "./StripePaymentForm";
+import { getPublicClient } from "@/lib/db";
+
+async function getAccessToken(): Promise<string | null> {
+  try {
+    const { data: { session } } = await getPublicClient().auth.getSession();
+    return session?.access_token ?? null;
+  } catch {
+    return null;
+  }
+}
 
 const stripePromise = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
   ? loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY)
@@ -96,13 +106,18 @@ export function CheckoutForm() {
     setLoadingIntent(true);
     setIntentError(null);
     try {
+      const token = await getAccessToken();
+      if (!token) { openAuthModal("login"); return; }
+
       const res = await fetch("/api/payments/create-intent", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        // amount and userId are NOT sent — server re-derives prices from DB and gets userId from JWT
         body: JSON.stringify({
-          amount:          subtotal,
           shopId:          shop?.id,
-          userId:          user.id,
           items:           items.map((i) => ({ id: i.product.id, name: i.product.name, qty: i.quantity, price: i.product.price })),
           deliveryType,
           deliveryAddress: address,

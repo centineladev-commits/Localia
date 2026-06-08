@@ -1,20 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import { getAdminClient } from "@/lib/db";
+import { getRequestUser } from "@/lib/auth-server";
 
 export const dynamic = "force-dynamic";
-
-async function getAuthUser(req: NextRequest) {
-  const token = req.headers.get("authorization")?.replace("Bearer ", "");
-  if (!token) return null;
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    { auth: { persistSession: false } }
-  );
-  const { data: { user } } = await supabase.auth.getUser(token);
-  return user;
-}
 
 /** GET /api/reviews?shop_id=xxx — lista reseñas públicas de un comercio */
 export async function GET(req: NextRequest) {
@@ -41,7 +29,7 @@ export async function GET(req: NextRequest) {
 
 /** POST /api/reviews — crear reseña (requiere auth) */
 export async function POST(req: NextRequest) {
-  const user = await getAuthUser(req);
+  const user = await getRequestUser(req);
   if (!user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 
   const { shop_id, rating, comment } = await req.json();

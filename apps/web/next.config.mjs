@@ -43,11 +43,19 @@ const nextConfig = {
     return config;
   },
   images: {
+    formats: ["image/avif", "image/webp"],
+    minimumCacheTTL: 86400, // 24h de caché para imágenes optimizadas
     remotePatterns: [
       { protocol: "https", hostname: "images.unsplash.com" },
       { protocol: "https", hostname: "*.supabase.co" },
       { protocol: "https", hostname: "*.r2.cloudflarestorage.com" },
     ],
+  },
+  // Compresión de respuestas HTTP
+  compress: true,
+  // Evitar prerrender innecesario en páginas dinámicas
+  experimental: {
+    optimizePackageImports: ["lucide-react"],
   },
   async headers() {
     return [

@@ -110,7 +110,7 @@ export default function ReservasPage() {
                   <div className="px-5 py-4">
                     <div className="flex items-start gap-4">
                       {r.product?.images?.[0] && (
-                        <img src={r.product.images[0]} alt="" className="w-16 h-16 rounded-xl object-cover shrink-0" />
+                        <img src={r.product.images[0]} alt="" loading="lazy" decoding="async" className="w-16 h-16 rounded-xl object-cover shrink-0" />
                       )}
                       <div className="flex-1 min-w-0">
                         <p className="font-bold text-slate-800">{r.product?.name ?? "Producto"}</p>

@@ -4,6 +4,15 @@ import { useState, useEffect } from "react";
 import { useAuthStore } from "@/store/auth.store";
 import { getPublicClient } from "@/lib/db";
 
+async function getAccessToken(): Promise<string | null> {
+  try {
+    const { data: { session } } = await getPublicClient().auth.getSession();
+    return session?.access_token ?? null;
+  } catch {
+    return null;
+  }
+}
+
 interface Reservation {
   id: string;
   quantity: number;
@@ -62,9 +71,13 @@ export default function DashboardReservasPage() {
   }
 
   async function respond(id: string, action: "confirmed" | "rejected") {
+    const token = await getAccessToken();
     const res = await fetch("/api/reservations", {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
       body: JSON.stringify({ reservationId: id, action }),
     });
     if (res.ok) {
@@ -119,7 +132,7 @@ export default function DashboardReservasPage() {
                 <div className="px-5 py-4">
                   <div className="flex items-start gap-4">
                     {r.product?.images?.[0] && (
-                      <img src={r.product.images[0]} alt="" className="w-14 h-14 rounded-xl object-cover shrink-0" />
+                      <img src={r.product.images[0]} alt="" loading="lazy" decoding="async" className="w-14 h-14 rounded-xl object-cover shrink-0" />
                     )}
                     <div className="flex-1 min-w-0">
                       <p className="font-bold text-gray-800">{r.product?.name ?? "Producto"}</p>

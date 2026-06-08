@@ -104,7 +104,7 @@ export default function WishlistPage() {
               <div key={item.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm flex items-center gap-4 p-4 hover:shadow-md transition-shadow">
                 <Link href={`/producto/${item.product.id}`} className="w-20 h-20 rounded-xl overflow-hidden bg-slate-100 shrink-0">
                   {item.product.images[0] ? (
-                    <img src={item.product.images[0]} alt={item.product.name} className="w-full h-full object-cover" />
+                    <img src={item.product.images[0]} alt={item.product.name} loading="lazy" decoding="async" className="w-full h-full object-cover" />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-2xl">📦</div>
                   )}

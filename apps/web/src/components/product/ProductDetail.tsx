@@ -23,6 +23,17 @@ import type { Product, Shop } from "@/lib/types";
 import { useCartStore } from "@/store/cart.store";
 import { useAuthStore } from "@/store/auth.store";
 import { ChatButton } from "@/components/chat/ChatButton";
+import { getPublicClient } from "@/lib/db";
+
+/** Retrieve the current Supabase session access token. */
+async function getAccessToken(): Promise<string | null> {
+  try {
+    const { data: { session } } = await getPublicClient().auth.getSession();
+    return session?.access_token ?? null;
+  } catch {
+    return null;
+  }
+}
 
 export function ProductDetail({ product, shop }: { product: Product; shop: Shop }) {
   const [activeImage, setActiveImage]    = useState(0);
@@ -45,10 +56,15 @@ export function ProductDetail({ product, shop }: { product: Product; shop: Shop 
 
   useEffect(() => {
     if (!user) return;
-    fetch(`/api/wishlist?userId=${user.id}&productId=${product.id}`)
-      .then((r) => r.json())
-      .then((d) => setInWishlist(d.inWishlist))
-      .catch(() => {});
+    // Send auth token — server identifies the user from JWT, not from query param
+    getAccessToken().then((token) => {
+      fetch(`/api/wishlist?productId=${product.id}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+        .then((r) => r.json())
+        .then((d) => setInWishlist(d.inWishlist))
+        .catch(() => {});
+    });
   }, [user, product.id]);
 
   function handleAddToCart() {
@@ -71,10 +87,14 @@ export function ProductDetail({ product, shop }: { product: Product; shop: Shop 
     if (!user) { openAuthModal("login"); return; }
     setWishLoading(true);
     try {
+      const token = await getAccessToken();
       const res = await fetch("/api/wishlist", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: user.id, productId: product.id }),
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ productId: product.id }),
       });
       const data = await res.json();
       setInWishlist(data.inWishlist);
@@ -87,11 +107,16 @@ export function ProductDetail({ product, shop }: { product: Product; shop: Shop 
     if (!user) { openAuthModal("login"); return; }
     setReserving(true);
     try {
+      const token = await getAccessToken();
+      if (!token) { openAuthModal("login"); return; }
       const res = await fetch("/api/reservations", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        // userId is NOT sent in the body — the server reads it from the JWT
         body: JSON.stringify({
-          userId:    user.id,
           shopId:    shop.id,
           productId: product.id,
           quantity:  qty,

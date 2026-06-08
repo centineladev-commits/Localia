@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import Link from "next/link";
 import type { CatalogProduct } from "@/app/api/catalog/route";
 
@@ -10,7 +11,7 @@ function formatPrice(price: number): string {
   });
 }
 
-export function ProductCard({ product }: { product: CatalogProduct }) {
+function ProductCardInner({ product }: { product: CatalogProduct }) {
   const cityShort = product.cityName.split(",")[0];
 
   return (
@@ -24,10 +25,12 @@ export function ProductCard({ product }: { product: CatalogProduct }) {
               <img
                 src={product.images[0]}
                 alt={product.name}
+                loading="lazy"
+                decoding="async"
                 className="w-full h-full object-cover group-hover:scale-[1.06] transition-transform duration-500 ease-out"
               />
               {/* Overlay gradiente en hover */}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-black/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-400" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-black/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
             </>
           ) : (
             <div className="w-full h-full flex items-center justify-center bg-slate-50">
@@ -37,9 +40,9 @@ export function ProductCard({ product }: { product: CatalogProduct }) {
             </div>
           )}
 
-          {/* Badge ciudad — bottom-left sobre la imagen */}
+          {/* Badge ciudad — bottom-left sobre la imagen (sin backdrop-blur para rendimiento) */}
           {cityShort && product.stock > 0 && (
-            <span className="absolute bottom-2 left-2 inline-flex items-center gap-1 px-2 py-0.5 bg-black/40 backdrop-blur-md backdrop-saturate-150 text-white/95 text-[10px] font-semibold rounded-full shadow-sm shadow-black/20">
+            <span className="absolute bottom-2 left-2 inline-flex items-center gap-1 px-2 py-0.5 bg-black/60 text-white/95 text-[10px] font-semibold rounded-full shadow-sm">
               <svg className="w-2.5 h-2.5 shrink-0" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" />
               </svg>
@@ -57,7 +60,7 @@ export function ProductCard({ product }: { product: CatalogProduct }) {
 
           {/* Overlay Agotado */}
           {product.stock === 0 && (
-            <div className="absolute inset-0 bg-white/70 backdrop-blur-[2px] flex items-center justify-center">
+            <div className="absolute inset-0 bg-white/70 flex items-center justify-center">
               <span className="px-4 py-1.5 bg-slate-900/85 text-white text-xs font-black rounded-full tracking-widest uppercase shadow-lg">
                 Agotado
               </span>
@@ -84,9 +87,11 @@ export function ProductCard({ product }: { product: CatalogProduct }) {
             </svg>
             <span className="truncate font-medium text-slate-500">{product.shopName}</span>
           </div>
-
         </div>
       </div>
     </Link>
   );
 }
+
+// React.memo evita re-renders cuando el padre actualiza pero el producto no cambia
+export const ProductCard = memo(ProductCardInner);
