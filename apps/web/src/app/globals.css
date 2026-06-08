@@ -2,8 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-/* maplibre-gl map styles — imported here to avoid ESM chunk issues */
-@import 'maplibre-gl/dist/maplibre-gl.css';
+/* maplibre-gl map styles moved to /mapa layout — only loads on the map page */
 
 @layer base {
   html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
@@ -47,8 +46,7 @@
   to   { opacity: 1; transform: translateY(0); }
 }
 @keyframes shimmer {
-  0%   { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
+  to { transform: translateX(200%); }
 }
 @keyframes popIn {
   0%   { opacity: 0; transform: scale(0.94) translateY(4px); }
@@ -64,9 +62,27 @@
 .animate-slide-up  { animation: slideUp 0.22s cubic-bezier(0.22,1,0.36,1); }
 .animate-slide-down { animation: slideDown 0.22s cubic-bezier(0.22,1,0.36,1); }
 .animate-pop-in    { animation: popIn 0.3s cubic-bezier(0.22,1,0.36,1); }
+/* GPU-composited shimmer: uses transform on a ::after pseudo-element
+   instead of animating background-position (which forces repaint every frame).
+   The parent needs position:relative + overflow:hidden — added inline here. */
 .animate-shimmer {
-  background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
-  background-size: 200% 100%;
+  position: relative;
+  overflow: hidden;
+  background-color: #f1f5f9;
+}
+.animate-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(241, 245, 249, 0) 20%,
+    rgba(226, 232, 240, 0.9) 50%,
+    rgba(241, 245, 249, 0) 80%,
+    transparent 100%
+  );
+  transform: translateX(-100%);
   animation: shimmer 1.8s ease-in-out infinite;
 }
 

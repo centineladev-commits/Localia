@@ -228,7 +228,7 @@ export function CatalogPage() {
         <div className="mt-5">
           {loading ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
-              {Array.from({ length: 10 }).map((_, i) => <Skeleton key={i} />)}
+              {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} />)}
             </div>
           ) : local.products.length === 0 ? (
             <EmptyState onReset={() => handleFilter({ q: "", category: "", priceMin: "", priceMax: "" })} />
