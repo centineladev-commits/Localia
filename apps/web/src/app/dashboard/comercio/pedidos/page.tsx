@@ -9,7 +9,9 @@ const STATUS_CONFIG: Record<string, { label: string; cls: string; dot: string; n
   paid:       { label: "Pagado",      cls: "bg-indigo-50 text-indigo-700",  dot: "bg-indigo-500",  next: "processing", nextLabel: "Empezar a preparar" },
   processing: { label: "Preparando",  cls: "bg-amber-50 text-amber-700",   dot: "bg-amber-500",   next: "ready",      nextLabel: "Listo para recoger" },
   ready:      { label: "Listo",       cls: "bg-emerald-50 text-emerald-700",dot: "bg-emerald-500", next: "delivered",  nextLabel: "Marcar entregado" },
-  delivered:  { label: "Entregado",   cls: "bg-gray-100 text-gray-500",    dot: "bg-gray-400" },
+  shipped:    { label: "Enviado",     cls: "bg-violet-50 text-violet-700",  dot: "bg-violet-500",  next: "delivered",  nextLabel: "Marcar entregado" },
+  delivered:  { label: "Entregado",   cls: "bg-gray-100 text-gray-500",    dot: "bg-gray-400",    next: "completed",  nextLabel: "Completar" },
+  completed:  { label: "Completado",  cls: "bg-emerald-50 text-emerald-700",dot: "bg-emerald-500" },
   cancelled:  { label: "Cancelado",   cls: "bg-red-50 text-red-500",       dot: "bg-red-400" },
 };
 
@@ -38,6 +40,8 @@ interface Order {
   delivery_address: string | null;
   created_at: string;
   paid_at: string | null;
+  tracking_number: string | null;
+  carrier: string | null;
   items: { name: string; qty: number; price: number }[];
   buyer: { display_name: string | null; email: string } | null;
 }
@@ -100,7 +104,7 @@ export default function PedidosPage() {
     const [{ data: ord }, { data: rets }] = await Promise.all([
       supabase
         .from("orders")
-        .select("id, status, total, subtotal, delivery_type, delivery_address, created_at, paid_at, items, users!buyer_user_id(display_name, email)")
+        .select("id, status, total, subtotal, delivery_type, delivery_address, created_at, paid_at, tracking_number, carrier, items, users!buyer_user_id(display_name, email)")
         .eq("shop_id", sid)
         .order("created_at", { ascending: false })
         .limit(100),
@@ -117,10 +121,32 @@ export default function PedidosPage() {
     setLoading(false);
   }
 
+  // Las transiciones de estado pasan por la API (validación de propiedad en
+  // servidor), no por un update directo del cliente.
+  async function patchOrder(orderId: string, body: Record<string, unknown>): Promise<boolean> {
+    const t = await getAccessToken();
+    const res = await fetch("/api/seller/orders", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${t}` },
+      body: JSON.stringify({ orderId, ...body }),
+    });
+    if (!res.ok) { const d = await res.json(); alert(d.error ?? "No se pudo actualizar"); return false; }
+    return true;
+  }
+
   async function advance(orderId: string, nextStatus: string) {
-    const supabase = getPublicClient();
-    await supabase.from("orders").update({ status: nextStatus, updated_at: new Date().toISOString() }).eq("id", orderId);
-    setOrders((prev) => prev.map((o) => o.id === orderId ? { ...o, status: nextStatus } : o));
+    if (await patchOrder(orderId, { status: nextStatus })) {
+      setOrders((prev) => prev.map((o) => o.id === orderId ? { ...o, status: nextStatus } : o));
+    }
+  }
+
+  async function shipOrder(orderId: string) {
+    const carrier = (window.prompt("Empresa de transporte (SEUR, MRW, Correos, GLS…):") ?? "").trim();
+    if (!carrier) return;
+    const tracking = (window.prompt("Número de seguimiento:") ?? "").trim();
+    if (await patchOrder(orderId, { status: "shipped", carrier, trackingNumber: tracking })) {
+      setOrders((prev) => prev.map((o) => o.id === orderId ? { ...o, status: "shipped", carrier, tracking_number: tracking } : o));
+    }
   }
 
   async function resolveReturn(id: string, action: "accept" | "reject") {
@@ -241,6 +267,10 @@ export default function PedidosPage() {
                         <div className="text-right shrink-0">
                           <p className="text-lg font-black text-gray-900">{Number(order.total).toFixed(2)} €</p>
                           {cfg.next && <button onClick={() => advance(order.id, cfg.next!)} className="mt-2 px-3 py-1.5 bg-indigo-600 text-white text-xs font-bold rounded-lg hover:bg-indigo-700 transition-colors shadow-sm">{cfg.nextLabel}</button>}
+                          {order.delivery_type === "local_delivery" && ["paid", "processing", "ready"].includes(order.status) && (
+                            <button onClick={() => shipOrder(order.id)} className="mt-1.5 block ml-auto px-3 py-1.5 bg-violet-600 text-white text-xs font-bold rounded-lg hover:bg-violet-700 transition-colors">📦 Enviar con seguimiento</button>
+                          )}
+                          {order.tracking_number && <p className="mt-1.5 text-[11px] text-gray-400">{order.carrier} · {order.tracking_number}</p>}
                         </div>
                       </div>
                     </div>

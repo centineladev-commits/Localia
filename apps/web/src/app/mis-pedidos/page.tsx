@@ -15,6 +15,8 @@ interface Order {
   stripe_payment_id: string | null;
   paid_at: string | null;
   created_at: string;
+  tracking_number: string | null;
+  carrier: string | null;
   items: { id: string; name: string; qty: number; price: number }[];
   shop: { name: string; slug: string; logo_url: string | null } | null;
 }
@@ -26,7 +28,9 @@ const STATUS: Record<string, { label: string; cls: string; icon: string }> = {
   paid:       { label: "Pagado",            cls: "bg-blue-50 text-blue-700 ring-1 ring-blue-200",       icon: "💳" },
   processing: { label: "Preparando",        cls: "bg-yellow-50 text-yellow-700 ring-1 ring-yellow-200", icon: "🔧" },
   ready:      { label: "Listo para recoger",cls: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200", icon: "✅" },
+  shipped:    { label: "Enviado",           cls: "bg-violet-50 text-violet-700 ring-1 ring-violet-200", icon: "🚚" },
   delivered:  { label: "Entregado",         cls: "bg-gray-50 text-gray-500 ring-1 ring-gray-200",       icon: "📦" },
+  completed:  { label: "Completado",        cls: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200", icon: "✅" },
   cancelled:  { label: "Cancelado",         cls: "bg-red-50 text-red-600 ring-1 ring-red-200",          icon: "❌" },
 };
 
@@ -65,7 +69,7 @@ export default function MisPedidosPage() {
     const [{ data: ord }, { data: rets }] = await Promise.all([
       supabase
         .from("orders")
-        .select("id, status, total, subtotal, delivery_type, delivery_address, stripe_payment_id, paid_at, created_at, items, shops(name, slug, logo_url)")
+        .select("id, status, total, subtotal, delivery_type, delivery_address, stripe_payment_id, paid_at, created_at, tracking_number, carrier, items, shops(name, slug, logo_url)")
         .eq("buyer_user_id", user.id)
         .order("created_at", { ascending: false })
         .limit(50),
@@ -190,6 +194,9 @@ export default function MisPedidosPage() {
                       </div>
                       <span className="text-lg font-black text-slate-900">{Number(order.total).toFixed(2)} €</span>
                     </div>
+                    {order.tracking_number && (
+                      <p className="mt-2 text-xs text-violet-600 font-semibold">🚚 {order.carrier} · Seguimiento: {order.tracking_number}</p>
+                    )}
                     {isEligible(order) && (
                       <div className="mt-3 pt-3 border-t border-slate-50 flex justify-end">
                         <button
