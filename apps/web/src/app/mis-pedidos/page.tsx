@@ -19,6 +19,8 @@ interface Order {
   shop: { name: string; slug: string; logo_url: string | null } | null;
 }
 
+interface ReturnRow { id: string; order_id: string; status: string; }
+
 const STATUS: Record<string, { label: string; cls: string; icon: string }> = {
   pending:    { label: "Pendiente de pago", cls: "bg-amber-50 text-amber-700 ring-1 ring-amber-200",    icon: "⏳" },
   paid:       { label: "Pagado",            cls: "bg-blue-50 text-blue-700 ring-1 ring-blue-200",       icon: "💳" },
@@ -28,34 +30,87 @@ const STATUS: Record<string, { label: string; cls: string; icon: string }> = {
   cancelled:  { label: "Cancelado",         cls: "bg-red-50 text-red-600 ring-1 ring-red-200",          icon: "❌" },
 };
 
+const RETURN_STATUS: Record<string, { label: string; cls: string }> = {
+  pending:   { label: "Devolución solicitada", cls: "bg-amber-50 text-amber-700 ring-1 ring-amber-200" },
+  accepted:  { label: "Devolución aceptada",   cls: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200" },
+  rejected:  { label: "Devolución rechazada",  cls: "bg-red-50 text-red-600 ring-1 ring-red-200" },
+  completed: { label: "Reembolso completado",  cls: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200" },
+};
+
+const RETURNABLE = new Set(["paid", "processing", "ready", "delivered"]);
+const RETURN_WINDOW_DAYS = 14;
+
+async function getAccessToken(): Promise<string | null> {
+  try {
+    const { data: { session } } = await getPublicClient().auth.getSession();
+    return session?.access_token ?? null;
+  } catch { return null; }
+}
+
 export default function MisPedidosPage() {
   const { user, openAuthModal } = useAuthStore();
   const [orders, setOrders]     = useState<Order[]>([]);
+  const [returns, setReturns]   = useState<Record<string, ReturnRow>>({});
   const [loading, setLoading]   = useState(true);
 
-  useEffect(() => {
+  // modal de solicitud de devolución
+  const [returnFor, setReturnFor] = useState<Order | null>(null);
+  const [reason, setReason]       = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [modalError, setModalError] = useState<string | null>(null);
+
+  async function load() {
     if (!user) { setLoading(false); return; }
     const supabase = getPublicClient();
-    (async () => {
-      try {
-        const { data } = await supabase
-          .from("orders")
-          .select("id, status, total, subtotal, delivery_type, delivery_address, stripe_payment_id, paid_at, created_at, items, shops(name, slug, logo_url)")
-          .eq("buyer_user_id", user.id)
-          .order("created_at", { ascending: false })
-          .limit(50);
-        setOrders(
-          (data ?? []).map((o: any) => ({
-            ...o,
-            items: Array.isArray(o.items) ? o.items : [],
-            shop: o.shops ?? null,
-          }))
-        );
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [user]);
+    const [{ data: ord }, { data: rets }] = await Promise.all([
+      supabase
+        .from("orders")
+        .select("id, status, total, subtotal, delivery_type, delivery_address, stripe_payment_id, paid_at, created_at, items, shops(name, slug, logo_url)")
+        .eq("buyer_user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(50),
+      supabase.from("returns").select("id, order_id, status").eq("buyer_user_id", user.id),
+    ]);
+    setOrders(
+      (ord ?? []).map((o: any) => ({ ...o, items: Array.isArray(o.items) ? o.items : [], shop: o.shops ?? null }))
+    );
+    const map: Record<string, ReturnRow> = {};
+    for (const r of (rets ?? []) as any[]) map[r.order_id] = r;
+    setReturns(map);
+    setLoading(false);
+  }
+
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [user]);
+
+  function isEligible(o: Order): boolean {
+    if (returns[o.id]) return false;
+    if (!RETURNABLE.has(o.status)) return false;
+    const base = new Date(o.paid_at ?? o.created_at).getTime();
+    return (Date.now() - base) / 86_400_000 <= RETURN_WINDOW_DAYS;
+  }
+
+  async function submitReturn() {
+    if (!returnFor) return;
+    setSubmitting(true);
+    setModalError(null);
+    try {
+      const token = await getAccessToken();
+      const res = await fetch("/api/returns", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ orderId: returnFor.id, reason }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "No se pudo solicitar la devolución");
+      setReturnFor(null);
+      setReason("");
+      await load();
+    } catch (e: any) {
+      setModalError(e.message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   if (!user) {
     return (
@@ -65,10 +120,7 @@ export default function MisPedidosPage() {
           <p className="text-lg font-black text-slate-800">Accede para ver tus pedidos</p>
           <p className="text-sm text-slate-400 mt-1">Historial completo de compras y estado de entrega</p>
         </div>
-        <button
-          onClick={() => openAuthModal("login")}
-          className="px-8 py-3 bg-indigo-600 text-white font-bold rounded-full hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
-        >
+        <button onClick={() => openAuthModal("login")} className="px-8 py-3 bg-indigo-600 text-white font-bold rounded-full hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100">
           Iniciar sesión
         </button>
       </div>
@@ -107,30 +159,27 @@ export default function MisPedidosPage() {
           <div className="space-y-3">
             {orders.map((order) => {
               const cfg = STATUS[order.status] ?? STATUS.pending;
+              const ret = returns[order.id];
+              const retCfg = ret ? RETURN_STATUS[ret.status] : null;
               const date = new Date(order.created_at).toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" });
-              const itemSummary = order.items.length > 0
-                ? order.items.map((i) => `${i.name} ×${i.qty}`).join(", ")
-                : "Pedido";
+              const itemSummary = order.items.length > 0 ? order.items.map((i) => `${i.name} ×${i.qty}`).join(", ") : "Pedido";
 
               return (
                 <div key={order.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden hover:shadow-md transition-shadow">
-                  {/* Header */}
                   <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-50">
-                    <div className="flex items-center gap-2.5">
+                    <div className="flex items-center gap-2.5 flex-wrap">
                       <span className="font-black text-slate-600 text-sm font-mono">#{order.id.slice(0, 8).toUpperCase()}</span>
-                      <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold ${cfg.cls}`}>
-                        {cfg.icon} {cfg.label}
-                      </span>
+                      <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold ${cfg.cls}`}>{cfg.icon} {cfg.label}</span>
+                      {retCfg && (
+                        <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold ${retCfg.cls}`}>↩️ {retCfg.label}</span>
+                      )}
                     </div>
                     <span className="text-xs text-slate-400">{date}</span>
                   </div>
-                  {/* Body */}
                   <div className="px-5 py-4">
                     {order.shop && (
                       <Link href={`/tienda/${order.shop.slug}`} className="flex items-center gap-2 mb-3 group w-fit">
-                        <div className="w-7 h-7 rounded-lg bg-indigo-100 flex items-center justify-center text-indigo-600 font-black text-sm">
-                          {order.shop.name.charAt(0)}
-                        </div>
+                        <div className="w-7 h-7 rounded-lg bg-indigo-100 flex items-center justify-center text-indigo-600 font-black text-sm">{order.shop.name.charAt(0)}</div>
                         <span className="text-sm font-bold text-slate-700 group-hover:text-indigo-600 transition-colors">{order.shop.name}</span>
                       </Link>
                     )}
@@ -141,6 +190,16 @@ export default function MisPedidosPage() {
                       </div>
                       <span className="text-lg font-black text-slate-900">{Number(order.total).toFixed(2)} €</span>
                     </div>
+                    {isEligible(order) && (
+                      <div className="mt-3 pt-3 border-t border-slate-50 flex justify-end">
+                        <button
+                          onClick={() => { setReturnFor(order); setReason(""); setModalError(null); }}
+                          className="text-xs font-bold text-slate-500 hover:text-indigo-600 border border-slate-200 hover:border-indigo-300 rounded-lg px-3 py-1.5 transition-colors"
+                        >
+                          ↩️ Solicitar devolución
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               );
@@ -148,6 +207,36 @@ export default function MisPedidosPage() {
           </div>
         )}
       </div>
+
+      {/* Modal de solicitud de devolución */}
+      {returnFor && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 animate-fade-in" onClick={() => !submitting && setReturnFor(null)}>
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-6 animate-scale-in" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-lg font-black text-slate-900">Solicitar devolución</h2>
+            <p className="text-sm text-slate-400 mt-1">
+              Pedido <span className="font-mono font-bold">#{returnFor.id.slice(0, 8).toUpperCase()}</span> · {Number(returnFor.total).toFixed(2)} €
+            </p>
+            <label className="block text-xs font-bold text-slate-500 mt-4 mb-1.5 uppercase tracking-wide">Motivo de la devolución</label>
+            <textarea
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              rows={4}
+              maxLength={1000}
+              placeholder="Cuéntanos qué ha pasado (producto defectuoso, no corresponde a la descripción, no recibido...)"
+              className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent resize-none"
+            />
+            {modalError && <p className="text-xs text-red-500 mt-2 font-medium">{modalError}</p>}
+            <div className="flex gap-3 mt-5">
+              <button onClick={() => setReturnFor(null)} disabled={submitting} className="flex-1 py-3 border border-slate-200 text-slate-600 font-semibold rounded-xl hover:bg-slate-50 transition-colors text-sm disabled:opacity-50">
+                Cancelar
+              </button>
+              <button onClick={submitReturn} disabled={submitting || reason.trim().length < 5} className="flex-1 py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed">
+                {submitting ? "Enviando..." : "Enviar solicitud"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -5,6 +5,7 @@
 import { NextRequest } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import type { User } from "@supabase/supabase-js";
+import { getAdminClient } from "./db";
 
 /**
  * Extracts the Bearer token from the Authorization header and verifies it
@@ -29,12 +30,25 @@ export async function getRequestUser(req: NextRequest): Promise<User | null> {
 }
 
 /**
- * Returns true if the request carries a valid admin JWT
- * (user.app_metadata.is_admin === true).
+ * Returns true if the request is from an admin. Acepta DOS fuentes (unificadas):
+ *  - JWT app_metadata.is_admin === true, o
+ *  - la columna users.role === 'admin' (más fácil de marcar vía SQL).
  */
 export async function isAdminRequest(req: NextRequest): Promise<boolean> {
   const user = await getRequestUser(req);
-  return user?.app_metadata?.is_admin === true;
+  return isAdminUser(user);
+}
+
+export async function isAdminUser(user: User | null): Promise<boolean> {
+  if (!user) return false;
+  if (user.app_metadata?.is_admin === true) return true;
+  try {
+    const { data } = await getAdminClient()
+      .from("users").select("role").eq("id", user.id).single();
+    return (data as { role?: string } | null)?.role === "admin";
+  } catch {
+    return false;
+  }
 }
 
 /**
