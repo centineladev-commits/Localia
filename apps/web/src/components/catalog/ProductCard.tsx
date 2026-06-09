@@ -2,6 +2,7 @@
 
 import { memo } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import type { CatalogProduct } from "@/app/api/catalog/route";
 
 function formatPrice(price: number): string {
@@ -22,12 +23,12 @@ function ProductCardInner({ product }: { product: CatalogProduct }) {
         <div className="aspect-square overflow-hidden bg-slate-100 relative">
           {product.images[0] ? (
             <>
-              <img
+              <Image
                 src={product.images[0]}
                 alt={product.name}
-                loading="lazy"
-                decoding="async"
-                className="w-full h-full object-cover group-hover:scale-[1.06] transition-transform duration-500 ease-out"
+                fill
+                sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
+                className="object-cover group-hover:scale-[1.06] transition-transform duration-500 ease-out"
               />
               {/* Overlay gradiente en hover */}
               <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-black/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
