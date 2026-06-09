@@ -217,9 +217,15 @@ export async function PATCH(req: NextRequest) {
 
       if (stripe && paymentId && refundAmount > 0) {
         try {
+          // Si el vendedor usa Connect, revertir también la transferencia y la
+          // comisión (el dinero vuelve al comprador completo).
+          const { data: shopRow } = await supabase
+            .from("shops").select("stripe_account_id").eq("id", (ret as any).shop_id).single();
+          const useConnect = !!(shopRow as any)?.stripe_account_id;
           const refund = await stripe.refunds.create({
             payment_intent: paymentId,
             amount: Math.round(refundAmount * 100),
+            ...(useConnect ? { reverse_transfer: true, refund_application_fee: true } : {}),
           });
           stripeRefundId = refund.id;
           finalStatus = "completed";

@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { getAdminClient } from "@/lib/db";
 import { getRequestUser } from "@/lib/auth-server";
-import { calcFee, calcShipping } from "@/lib/constants";
+import { calcShipping } from "@/lib/constants";
+import { getCommissionPercent } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
 
@@ -117,12 +118,20 @@ export async function POST(req: NextRequest) {
     const shipping   = calcShipping(subtotal, deliveryMode);
     const grandTotal = +(subtotal + shipping).toFixed(2);
 
-    // Comisión de plataforma (0 si exención activa)
-    const exempted    = await hasActiveExemption(shopId);
-    const platformFee = exempted ? 0 : calcFee(grandTotal);
-    const amountCents = Math.round(grandTotal * 100);
+    // Comisión de plataforma (configurable desde admin; 0 si exención activa)
+    const exempted     = await hasActiveExemption(shopId);
+    const commissionPct = await getCommissionPercent();
+    const platformFee  = exempted ? 0 : +(grandTotal * commissionPct / 100).toFixed(2);
+    const amountCents     = Math.round(grandTotal * 100);
+    const platformFeeCents = Math.round(platformFee * 100);
 
-    const paymentIntent = await stripe.paymentIntents.create({
+    // Datos de Stripe Connect del vendedor (para el split de pagos)
+    const { data: shopRow } = await supabase
+      .from("shops").select("stripe_account_id, stripe_charges_enabled").eq("id", shopId).single();
+    const connectedAccount = (shopRow as any)?.stripe_account_id as string | null;
+    const chargesEnabled   = (shopRow as any)?.stripe_charges_enabled === true;
+
+    const intentParams: Stripe.PaymentIntentCreateParams = {
       amount:   amountCents,
       currency: "eur",
       automatic_payment_methods: { enabled: true },
@@ -135,7 +144,17 @@ export async function POST(req: NextRequest) {
         feeExempted:     exempted ? "true" : "false",
         items:           JSON.stringify(verifiedItems),
       },
-    });
+    };
+
+    // SPLIT DE MARKETPLACE: si el vendedor tiene Connect activo, la plataforma
+    // cobra el total, retiene la comisión (application_fee) y transfiere el
+    // resto a la cuenta del vendedor automáticamente. Sin Connect → cobro normal.
+    if (connectedAccount && chargesEnabled) {
+      intentParams.application_fee_amount = platformFeeCents;
+      intentParams.transfer_data = { destination: connectedAccount };
+    }
+
+    const paymentIntent = await stripe.paymentIntents.create(intentParams);
 
     // Crear borrador de pedido con precios verificados ANTES de devolver el
     // clientSecret. El cliente de Supabase NO lanza en error (lo devuelve en
