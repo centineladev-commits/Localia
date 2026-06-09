@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Gift, ShieldCheck, X, Clock, ShieldAlert, RotateCcw } from "lucide-react";
+import { Gift, ShieldCheck, X, Clock, ShieldAlert, RotateCcw, Store, FileText } from "lucide-react";
 import { useAuthStore } from "@/store/auth.store";
 import { getPublicClient } from "@/lib/db";
 
@@ -66,7 +66,7 @@ const RET_LABEL: Record<string, string> = { pending: "Pendiente", accepted: "Ace
 // ─────────────────────────────────────────────
 export default function AdminPage() {
   const { user, loading } = useAuthStore();
-  const [tab, setTab]         = useState<"shops" | "returns" | "exemptions">("shops");
+  const [tab, setTab]         = useState<"applications" | "shops" | "returns" | "exemptions">("applications");
   const [token, setToken]     = useState<string | null>(null);
   const [isAdmin, setIsAdmin]           = useState(false);
   const [adminChecked, setAdminChecked] = useState(false);
@@ -124,9 +124,10 @@ export default function AdminPage() {
 
       <div className="flex gap-2 border-b border-slate-100 pb-0">
         {([
-          { key: "shops",      label: "Verificación de comercios", icon: ShieldCheck },
-          { key: "returns",    label: "Devoluciones",              icon: RotateCcw   },
-          { key: "exemptions", label: "Exenciones de comisión",    icon: Gift        },
+          { key: "applications", label: "Solicitudes de vendedor", icon: Store       },
+          { key: "shops",        label: "Verificación de comercios", icon: ShieldCheck },
+          { key: "returns",      label: "Devoluciones",              icon: RotateCcw   },
+          { key: "exemptions",   label: "Exenciones de comisión",    icon: Gift        },
         ] as const).map(({ key, label, icon: Icon }) => (
           <button
             key={key}
@@ -143,9 +144,120 @@ export default function AdminPage() {
         ))}
       </div>
 
-      {tab === "shops"      && <ShopsTab token={token} />}
-      {tab === "returns"    && <ReturnsTab token={token} />}
-      {tab === "exemptions" && <ExemptionsTab adminId={user.id} token={token} />}
+      {tab === "applications" && <SellerApplicationsTab token={token} />}
+      {tab === "shops"        && <ShopsTab token={token} />}
+      {tab === "returns"      && <ReturnsTab token={token} />}
+      {tab === "exemptions"   && <ExemptionsTab adminId={user.id} token={token} />}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
+//  Pestaña: Solicitudes de vendedor (onboarding)
+// ─────────────────────────────────────────────
+interface SellerApp {
+  id: string; business_name: string; nif: string; fiscal_address: string;
+  contact_name: string; phone: string; business_email: string; category: string | null;
+  website: string | null; description: string | null; status: string; review_note: string | null;
+  documents: { type: string; name?: string; signedUrl: string | null }[];
+  created_at: string; applicant: { email: string; display_name: string | null } | null;
+}
+const APP_BADGE: Record<string, string> = {
+  pending: "bg-amber-50 text-amber-700 ring-1 ring-amber-200",
+  approved: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200",
+  rejected: "bg-red-50 text-red-600 ring-1 ring-red-200",
+  needs_more_docs: "bg-blue-50 text-blue-700 ring-1 ring-blue-200",
+};
+const APP_LABEL: Record<string, string> = { pending: "Pendiente", approved: "Aprobada", rejected: "Rechazada", needs_more_docs: "Faltan documentos" };
+
+function SellerApplicationsTab({ token }: { token: string | null }) {
+  const [apps, setApps]     = useState<SellerApp[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState<"pending" | "all">("pending");
+  const [acting, setActing] = useState<string | null>(null);
+
+  function load() {
+    if (!token) return;
+    fetch("/api/admin/seller-applications", { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => r.json()).then((d) => { setApps(d.applications ?? []); setLoading(false); }).catch(() => setLoading(false));
+  }
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [token]);
+
+  async function act(id: string, action: "approve" | "reject" | "needs_docs") {
+    let note: string | undefined;
+    if (action === "reject") { note = window.prompt("Motivo del rechazo (se envía al comercio):") ?? undefined; if (note === undefined) return; }
+    if (action === "needs_docs") { note = window.prompt("¿Qué documentación falta?") ?? undefined; if (note === undefined) return; }
+    if (action === "approve" && !window.confirm("¿Aprobar este comercio? Se creará su tienda y podrá vender.")) return;
+    setActing(id);
+    try {
+      const res = await fetch("/api/admin/seller-applications", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ applicationId: id, action, note }),
+      });
+      const d = await res.json();
+      if (!res.ok) alert(d.error ?? "Error");
+      load();
+    } finally { setActing(null); }
+  }
+
+  const pending  = apps.filter((a) => a.status === "pending" || a.status === "needs_more_docs");
+  const filtered = filter === "pending" ? pending : apps;
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center gap-2">
+        {(["pending", "all"] as const).map((f) => (
+          <button key={f} onClick={() => setFilter(f)}
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${filter === f ? "bg-indigo-600 text-white shadow-sm shadow-indigo-200" : "bg-white text-slate-600 hover:bg-slate-50 border border-slate-200"}`}>
+            {f === "pending" ? "Pendientes" : "Todas"}
+            <span className={`text-xs font-bold px-1.5 py-0.5 rounded-md ${filter === f ? "bg-white/20 text-white" : "bg-slate-100 text-slate-500"}`}>{f === "pending" ? pending.length : apps.length}</span>
+          </button>
+        ))}
+      </div>
+
+      {loading ? (
+        <div className="flex items-center justify-center py-16"><div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" /></div>
+      ) : filtered.length === 0 ? (
+        <div className="text-center py-16 text-slate-400"><Store className="w-10 h-10 mx-auto mb-3 opacity-30" /><p className="font-semibold">No hay solicitudes {filter === "pending" ? "pendientes" : "registradas"}</p></div>
+      ) : (
+        <div className="space-y-3">
+          {filtered.map((a) => (
+            <div key={a.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+              <div className="flex items-start justify-between gap-4 mb-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap mb-1">
+                    <h3 className="font-bold text-slate-900">{a.business_name}</h3>
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${APP_BADGE[a.status] ?? APP_BADGE.pending}`}>{APP_LABEL[a.status] ?? a.status}</span>
+                    {a.category && <span className="text-xs text-slate-400">· {a.category}</span>}
+                  </div>
+                  <p className="text-xs text-slate-500">NIF {a.nif} · {a.fiscal_address}</p>
+                  <p className="text-xs text-slate-500">{a.contact_name} · {a.phone} · {a.business_email}</p>
+                  {a.website && <p className="text-xs text-slate-400">{a.website}</p>}
+                  {a.description && <p className="text-sm text-slate-600 mt-2">{a.description}</p>}
+                  {a.documents?.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-3">
+                      {a.documents.map((doc, i) => (
+                        <a key={i} href={doc.signedUrl ?? "#"} target="_blank" rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 rounded-lg text-xs font-semibold text-slate-600">
+                          <FileText className="w-3 h-3" /> {doc.type}
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+              {(a.status === "pending" || a.status === "needs_more_docs") && (
+                <div className="flex gap-2 justify-end pt-3 border-t border-slate-50">
+                  <button onClick={() => act(a.id, "needs_docs")} disabled={acting === a.id} className="px-3 py-1.5 bg-white border border-blue-200 text-blue-600 text-xs font-bold rounded-lg hover:bg-blue-50 disabled:opacity-50">Pedir documentación</button>
+                  <button onClick={() => act(a.id, "reject")} disabled={acting === a.id} className="px-3 py-1.5 bg-white border border-red-200 text-red-600 text-xs font-bold rounded-lg hover:bg-red-50 disabled:opacity-50">Rechazar</button>
+                  <button onClick={() => act(a.id, "approve")} disabled={acting === a.id} className="px-4 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded-lg hover:bg-emerald-700 disabled:opacity-50">{acting === a.id ? "..." : "Aprobar"}</button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

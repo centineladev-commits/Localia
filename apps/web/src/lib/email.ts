@@ -187,6 +187,50 @@ export async function sendReturnResolvedEmail(d: ReturnResolvedData) {
   });
 }
 
+/** Emails del onboarding de vendedor. */
+export async function sendSellerEmail(d: {
+  to?: string;
+  type: "received" | "approved" | "rejected" | "needs_docs";
+  businessName: string;
+  note?: string;
+}) {
+  if (!resend || !d.to) {
+    console.log("[email] seller", d.type, "(simulado):", d.businessName);
+    return;
+  }
+  const tpl = {
+    received: {
+      subj: "Hemos recibido tu solicitud de vendedor",
+      heading: "Solicitud recibida ✅",
+      body: `<p style="font-size:14px;color:#374151;margin:0 0 12px">Gracias por solicitar una cuenta de vendedor para <strong>${d.businessName}</strong>.</p>
+             <p style="font-size:14px;color:#374151;margin:0">Nuestro equipo revisará tus datos y documentación en 24–48 h y te avisaremos por email.</p>`,
+    },
+    approved: {
+      subj: "¡Tu cuenta de vendedor ha sido aprobada! 🎉",
+      heading: "¡Bienvenido a Localia! 🎉",
+      body: `<p style="font-size:14px;color:#374151;margin:0 0 12px"><strong>${d.businessName}</strong> ya es un comercio verificado en Localia.</p>
+             <p style="font-size:14px;color:#374151;margin:0 0 16px">Ya puedes acceder a tu panel de comercio, publicar productos y configurar los pagos (Stripe Connect) para recibir tus ventas.</p>
+             <a href="https://localia-web-nine.vercel.app/dashboard/comercio" style="display:inline-block;padding:10px 18px;background:#4f46e5;color:#fff;border-radius:10px;text-decoration:none;font-weight:700;font-size:14px">Ir a mi panel</a>`,
+    },
+    rejected: {
+      subj: "Sobre tu solicitud de vendedor en Localia",
+      heading: "Solicitud no aprobada",
+      body: `<p style="font-size:14px;color:#374151;margin:0 0 12px">Lamentablemente no hemos podido aprobar la solicitud de <strong>${d.businessName}</strong> en este momento.</p>
+             ${d.note ? `<div style="background:#fef2f2;border-radius:12px;padding:14px;margin-bottom:8px"><p style="margin:0;font-size:14px;color:#374151"><strong>Motivo:</strong> ${d.note}</p></div>` : ""}
+             <p style="font-size:13px;color:#6b7280;margin:0">Puedes corregir lo indicado y volver a solicitarlo.</p>`,
+    },
+    needs_docs: {
+      subj: "Necesitamos más documentación — solicitud de vendedor",
+      heading: "Documentación adicional requerida",
+      body: `<p style="font-size:14px;color:#374151;margin:0 0 12px">Para continuar con la verificación de <strong>${d.businessName}</strong> necesitamos documentación adicional.</p>
+             ${d.note ? `<div style="background:#fffbeb;border-radius:12px;padding:14px;margin-bottom:8px"><p style="margin:0;font-size:14px;color:#374151">${d.note}</p></div>` : ""}
+             <p style="font-size:13px;color:#6b7280;margin:0">Responde a este email o vuelve a tu solicitud para adjuntarla.</p>`,
+    },
+  }[d.type];
+
+  await resend.emails.send({ from: FROM, to: d.to, subject: tpl.subj, html: emailShell(tpl.heading, tpl.body) });
+}
+
 export async function sendOrderConfirmationEmails(data: OrderEmailData) {
   if (!resend) {
     console.log("[email] RESEND_API_KEY no configurada — email simulado:", data.orderId);
