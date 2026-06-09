@@ -27,6 +27,22 @@ const INPUT =
 const CARD =
   "bg-white rounded-2xl p-6 border border-slate-100 shadow-sm space-y-4";
 
+// Mapeo MIME→extensión: usa el tipo REAL del fichero, no la extensión del
+// nombre (evita spoofing y avatares huérfanos con extensiones distintas).
+const MIME_TO_EXT: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+  "image/gif": "gif",
+  "image/avif": "avif",
+};
+
+function validateImage(file: File): string | null {
+  if (!MIME_TO_EXT[file.type]) return "El archivo debe ser una imagen (JPG, PNG, WEBP, GIF o AVIF).";
+  if (file.size > 5 * 1024 * 1024) return "La imagen es demasiado grande. El tamaño máximo es 5 MB.";
+  return null;
+}
+
 function sellerCompleteness(profile: Profile): number {
   const fields = [
     profile.business_name,
@@ -90,9 +106,11 @@ export default function PerfilPage() {
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(true);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [uploadingCover, setUploadingCover] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const coverInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!user) { setLoading(false); return; }
@@ -123,29 +141,22 @@ export default function PerfilPage() {
     const file = e.target.files?.[0];
     if (!file || !user) return;
 
-    // Validar tamaño (5 MB máx)
-    if (file.size > 5 * 1024 * 1024) {
-      setUploadError("La foto es demasiado grande. El tamaño máximo es 5 MB.");
-      return;
-    }
-    // Validar tipo
-    if (!file.type.startsWith("image/")) {
-      setUploadError("El archivo debe ser una imagen (JPG, PNG o WEBP).");
-      return;
-    }
+    const validationError = validateImage(file);
+    if (validationError) { setUploadError(validationError); return; }
 
     setUploadError(null);
     setUploadingAvatar(true);
     try {
       const supabase = getPublicClient();
-      const ext = file.name.split(".").pop()?.toLowerCase() ?? "jpg";
+      const ext = MIME_TO_EXT[file.type] ?? "jpg";
       const path = `avatars/${user.id}.${ext}`;
       const { error: uploadErr } = await supabase.storage
         .from("public-images")
-        .upload(path, file, { upsert: true });
+        .upload(path, file, { upsert: true, contentType: file.type });
       if (uploadErr) throw uploadErr;
+      // cache-bust para que el navegador muestre la nueva imagen aunque el path se reuse
       const { data: urlData } = supabase.storage.from("public-images").getPublicUrl(path);
-      const newUrl = urlData.publicUrl;
+      const newUrl = `${urlData.publicUrl}?t=${Date.now()}`;
       setProfile((p) => ({ ...p, avatar_url: newUrl }));
       await supabase.from("users").upsert({
         id: user.id,
@@ -156,12 +167,44 @@ export default function PerfilPage() {
     } catch (err: any) {
       setUploadError(
         err?.message?.includes("Bucket not found")
-          ? "El bucket 'public-images' no existe en Supabase Storage. Créalo primero."
+          ? "El bucket 'public-images' no existe en Supabase Storage. Aplica la migración 0010 o créalo en el Dashboard."
           : err?.message ?? "Error al subir la foto. Inténtalo de nuevo."
       );
     } finally {
       setUploadingAvatar(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
+  async function handleCoverFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+
+    const validationError = validateImage(file);
+    if (validationError) { setUploadError(validationError); return; }
+
+    setUploadError(null);
+    setUploadingCover(true);
+    try {
+      const supabase = getPublicClient();
+      const ext = MIME_TO_EXT[file.type] ?? "jpg";
+      const path = `covers/${user.id}.${ext}`;
+      const { error: uploadErr } = await supabase.storage
+        .from("public-images")
+        .upload(path, file, { upsert: true, contentType: file.type });
+      if (uploadErr) throw uploadErr;
+      const { data: urlData } = supabase.storage.from("public-images").getPublicUrl(path);
+      const newUrl = `${urlData.publicUrl}?t=${Date.now()}`;
+      setProfile((p) => ({ ...p, cover_url: newUrl }));
+    } catch (err: any) {
+      setUploadError(
+        err?.message?.includes("Bucket not found")
+          ? "El bucket 'public-images' no existe en Supabase Storage. Aplica la migración 0010 o créalo en el Dashboard."
+          : err?.message ?? "Error al subir la imagen de cabecera. Inténtalo de nuevo."
+      );
+    } finally {
+      setUploadingCover(false);
+      if (coverInputRef.current) coverInputRef.current.value = "";
     }
   }
 
@@ -588,25 +631,56 @@ export default function PerfilPage() {
                 </div>
               </div>
 
-              {/* Imagen de cabecera de la tienda */}
+              {/* Imagen de cabecera / banner de la tienda */}
               <div>
                 <label className={LABEL}>
                   Imagen de cabecera de la tienda <span className="text-slate-300 font-normal normal-case">(opcional)</span>
                 </label>
-                <p className="text-xs text-slate-400 mb-2">Se mostrará en el mapa y en tu escaparate.</p>
+                <p className="text-xs text-slate-400 mb-2">Se mostrará en el mapa y en tu escaparate. Formato apaisado recomendado (16:9).</p>
+
+                <input ref={coverInputRef} type="file" accept="image/*" className="hidden" onChange={handleCoverFile} />
+
+                {/* Banner con preview + botón de cambio superpuesto */}
+                <div
+                  onClick={() => !uploadingCover && coverInputRef.current?.click()}
+                  className="relative group aspect-[16/9] w-full rounded-xl overflow-hidden border-2 border-dashed border-slate-200 hover:border-indigo-300 bg-slate-50 cursor-pointer transition-colors flex items-center justify-center"
+                >
+                  {uploadingCover ? (
+                    <div className="flex flex-col items-center gap-2 text-indigo-600">
+                      <div className="w-8 h-8 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
+                      <span className="text-xs font-semibold">Subiendo banner...</span>
+                    </div>
+                  ) : profile.cover_url ? (
+                    <>
+                      <img
+                        src={profile.cover_url}
+                        alt="banner de la tienda"
+                        className="w-full h-full object-cover"
+                        onError={(e) => { (e.target as HTMLImageElement).style.opacity = "0.15"; }}
+                      />
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
+                        <span className="opacity-0 group-hover:opacity-100 transition-opacity text-white text-sm font-bold flex items-center gap-1.5">
+                          <IconCamera /> Cambiar banner
+                        </span>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex flex-col items-center gap-1 text-slate-400 py-6">
+                      <IconUpload />
+                      <p className="text-sm font-semibold text-slate-500">Sube el banner de tu tienda</p>
+                      <p className="text-xs text-slate-300">JPG, PNG o WEBP — máx. 5 MB</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* URL como alternativa */}
                 <input
                   type="url"
                   value={profile.cover_url ?? ""}
                   onChange={(e) => setProfile((p) => ({ ...p, cover_url: e.target.value }))}
-                  placeholder="https://ejemplo.com/mi-tienda-foto.jpg"
-                  className={INPUT}
+                  placeholder="…o pega una URL: https://ejemplo.com/mi-tienda.jpg"
+                  className={INPUT + " text-xs mt-2"}
                 />
-                {profile.cover_url && (
-                  <div className="mt-2 h-24 rounded-xl overflow-hidden border border-slate-200">
-                    <img src={profile.cover_url} alt="preview portada" className="w-full h-full object-cover"
-                      onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
-                  </div>
-                )}
               </div>
             </div>
           )}
