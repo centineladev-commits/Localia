@@ -9,8 +9,32 @@ import { useLocationStore } from "@/store/location.store";
 import { ShopPopup } from "./ShopPopup";
 // CSS imported in globals.css to avoid dynamic-import resolution issues
 
-// Estilo CARTO Positron — gratuito, sin token
-const MAP_STYLE = "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json";
+// Basemap RÁSTER de CARTO Positron (gratuito, sin token).
+// IMPORTANTE: usamos tiles RÁSTER, no vectoriales. Los tiles vectoriales se
+// renderizan con shaders de GPU que fallan en backends WebGL por software
+// (p. ej. "Microsoft Basic Render Driver" / SwiftShader en equipos sin
+// aceleración por hardware), dejando el mapa EN BLANCO. Los tiles ráster son
+// simples imágenes texturizadas y se dibujan en CUALQUIER implementación WebGL.
+const MAP_STYLE = {
+  version: 8,
+  sources: {
+    "carto-raster": {
+      type: "raster",
+      tiles: [
+        "https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png",
+        "https://b.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png",
+        "https://c.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png",
+        "https://d.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png",
+      ],
+      tileSize: 256,
+      attribution:
+        '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> · © <a href="https://carto.com/attributions">CARTO</a>',
+    },
+  },
+  layers: [
+    { id: "carto-raster", type: "raster", source: "carto-raster", minzoom: 0, maxzoom: 20 },
+  ],
+} as const;
 const DEFAULT_VIEWPORT = { longitude: -3.7038, latitude: 40.4168, zoom: MAP_ZOOM_DEFAULT };
 
 export function MapView() {
