@@ -17,6 +17,23 @@ export async function POST(req: NextRequest) {
   }
   const supabase = getAdminClient();
 
+  // ── Paso 0: asegurar que public.users tiene una fila con el id del auth user ──
+  // (causa raíz: el auth user no estaba en public.users → fallaban las FKs y el
+  //  guardado de perfil. Reconciliamos por email o insertamos.)
+  const { data: byEmail } = await supabase.from("users").select("id, role").eq("email", user.email!).maybeSingle();
+  if (byEmail && (byEmail as any).id !== user.id) {
+    // alinear el id de la fila existente al del auth user (BD vacía → sin FKs que rompan)
+    const { error: reErr } = await supabase.from("users").update({ id: user.id }).eq("email", user.email!);
+    if (reErr) return NextResponse.json({ step: "reconcile-users", error: reErr }, { status: 500 });
+  } else if (!byEmail) {
+    const { error: insErr } = await supabase.from("users").insert({
+      id: user.id, email: user.email!, role: "admin", display_name: "Óscar",
+    });
+    if (insErr) return NextResponse.json({ step: "insert-user", error: insErr }, { status: 500 });
+  }
+  // Garantizar rol admin por si acaso
+  await supabase.from("users").update({ role: "admin" }).eq("id", user.id);
+
   // Ciudad cualquiera
   const { data: city, error: cityErr } = await supabase.from("cities").select("id").limit(1).single();
   if (cityErr || !city) return NextResponse.json({ step: "city", error: cityErr ?? "sin ciudades" }, { status: 500 });
