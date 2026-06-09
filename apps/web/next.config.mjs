@@ -18,7 +18,12 @@ const securityHeaders = [
     key: "Content-Security-Policy",
     value: [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval' js.stripe.com",
+      // blob: es OBLIGATORIO para el web worker de MapLibre GL, que renderiza
+      // los tiles del mapa. Sin worker-src/child-src con blob:, el worker queda
+      // bloqueado por la CSP y el mapa se ve en blanco (tiles nunca se dibujan).
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: js.stripe.com",
+      "worker-src 'self' blob:",
+      "child-src 'self' blob:",
       "style-src 'self' 'unsafe-inline' fonts.googleapis.com",
       "font-src 'self' fonts.gstatic.com data:",
       "img-src 'self' data: blob: https:",
