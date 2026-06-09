@@ -15,6 +15,32 @@ const RETURN_WINDOW_DAYS = 14;
 // Estados de pedido desde los que se puede devolver (pagado en adelante, no cancelado)
 const RETURNABLE_STATES = new Set(["paid", "processing", "ready", "delivered"]);
 
+/* ─── GET: ADMIN lista todas las devoluciones ─────────────────────────────── */
+export async function GET(req: NextRequest) {
+  const user = await getRequestUser(req);
+  if (!user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+  if (!(await isAdminUser(user))) {
+    return NextResponse.json({ error: "No autorizado" }, { status: 403 });
+  }
+  const supabase = getAdminClient();
+  const { data, error } = await supabase
+    .from("returns")
+    .select("id, order_id, shop_id, status, reason, refund_amount, resolution_note, requested_at, created_at, users!buyer_user_id(display_name, email), shops(name)")
+    .order("created_at", { ascending: false })
+    .limit(300);
+  if (error) {
+    console.error("[returns GET]", error);
+    return NextResponse.json({ error: "Error interno" }, { status: 500 });
+  }
+  const returns = (data ?? []).map((r: any) => ({
+    id: r.id, order_id: r.order_id, shop_id: r.shop_id, status: r.status,
+    reason: r.reason, refund_amount: r.refund_amount, resolution_note: r.resolution_note,
+    requested_at: r.requested_at, created_at: r.created_at,
+    buyer: r.users ?? null, shop: r.shops ?? null,
+  }));
+  return NextResponse.json({ returns });
+}
+
 /* ─── POST: el COMPRADOR solicita una devolución ──────────────────────────── */
 export async function POST(req: NextRequest) {
   try {

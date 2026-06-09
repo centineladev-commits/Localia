@@ -1,18 +1,24 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Gift, ShieldCheck, X, Clock, ShieldAlert } from "lucide-react";
+import { Gift, ShieldCheck, X, Clock, ShieldAlert, RotateCcw } from "lucide-react";
 import { useAuthStore } from "@/store/auth.store";
 import { getPublicClient } from "@/lib/db";
 
 // ─────────────────────────────────────────────
 //  Tipos
 // ─────────────────────────────────────────────
-interface BusinessRequest {
-  id: string; email: string; display_name: string | null; business_name: string | null;
-  phone: string | null; address: string | null; nif: string | null;
-  website: string | null; instagram: string | null; commercial_type: string;
-  verified: boolean | null; created_at: string; updated_at: string;
+interface AdminShop {
+  id: string; name: string; slug: string; status: string; active: boolean;
+  address: string | null; phone: string | null; created_at: string;
+  owner: { display_name: string | null; email: string } | null;
+}
+interface AdminReturn {
+  id: string; order_id: string; status: string; reason: string;
+  refund_amount: number | null; resolution_note: string | null;
+  requested_at: string | null; created_at: string;
+  buyer: { display_name: string | null; email: string } | null;
+  shop: { name: string } | null;
 }
 interface Shop { id: string; name: string; slug: string; }
 interface Exemption {
@@ -40,12 +46,27 @@ function isActive(ex: Exemption): boolean {
   return new Date(ex.starts_at).getTime() <= now && new Date(ex.ends_at).getTime() >= now;
 }
 
+const SHOP_BADGE: Record<string, string> = {
+  pending:   "bg-amber-50 text-amber-700 ring-1 ring-amber-200",
+  verified:  "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200",
+  suspended: "bg-red-50 text-red-600 ring-1 ring-red-200",
+};
+const SHOP_LABEL: Record<string, string> = { pending: "Pendiente", verified: "Verificado", suspended: "Suspendido" };
+
+const RET_BADGE: Record<string, string> = {
+  pending:   "bg-amber-50 text-amber-700 ring-1 ring-amber-200",
+  accepted:  "bg-blue-50 text-blue-700 ring-1 ring-blue-200",
+  completed: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200",
+  rejected:  "bg-red-50 text-red-600 ring-1 ring-red-200",
+};
+const RET_LABEL: Record<string, string> = { pending: "Pendiente", accepted: "Aceptada", completed: "Reembolsada", rejected: "Rechazada" };
+
 // ─────────────────────────────────────────────
 //  Página principal
 // ─────────────────────────────────────────────
 export default function AdminPage() {
   const { user, loading } = useAuthStore();
-  const [tab, setTab]         = useState<"shops" | "exemptions">("shops");
+  const [tab, setTab]         = useState<"shops" | "returns" | "exemptions">("shops");
   const [token, setToken]     = useState<string | null>(null);
   const [isAdmin, setIsAdmin]           = useState(false);
   const [adminChecked, setAdminChecked] = useState(false);
@@ -57,28 +78,20 @@ export default function AdminPage() {
 
     if (!user) { setAdminChecked(true); return () => { cancelled = true; }; }
 
-    // Check 1: app_metadata.is_admin (set via Supabase Auth dashboard)
     if (user?.app_metadata?.is_admin === true) {
       setIsAdmin(true);
       setAdminChecked(true);
     } else {
-      // Check 2: users table role column (fallback for dev / missing metadata)
       Promise.resolve(
-        getPublicClient()
-          .from("users")
-          .select("role")
-          .eq("id", user.id)
-          .single()
+        getPublicClient().from("users").select("role").eq("id", user.id).single()
       )
         .then(({ data }) => {
           if (!cancelled) {
-            setIsAdmin(data?.role === "admin");
+            setIsAdmin((data as { role?: string } | null)?.role === "admin");
             setAdminChecked(true);
           }
         })
-        .catch(() => {
-          if (!cancelled) setAdminChecked(true);
-        });
+        .catch(() => { if (!cancelled) setAdminChecked(true); });
     }
 
     getPublicClient().auth.getSession().then(({ data }) => {
@@ -106,13 +119,13 @@ export default function AdminPage() {
     <div className="p-6 max-w-5xl space-y-6">
       <div>
         <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Panel de administración</h1>
-        <p className="text-sm text-slate-400 mt-1">Gestiona comercios y beneficios especiales de la plataforma.</p>
+        <p className="text-sm text-slate-400 mt-1">Gestiona comercios, devoluciones y beneficios de la plataforma.</p>
       </div>
 
-      {/* Pestañas */}
       <div className="flex gap-2 border-b border-slate-100 pb-0">
         {([
           { key: "shops",      label: "Verificación de comercios", icon: ShieldCheck },
+          { key: "returns",    label: "Devoluciones",              icon: RotateCcw   },
           { key: "exemptions", label: "Exenciones de comisión",    icon: Gift        },
         ] as const).map(({ key, label, icon: Icon }) => (
           <button
@@ -130,135 +143,209 @@ export default function AdminPage() {
         ))}
       </div>
 
-      {tab === "shops"      && <ShopsTab userId={user.id} />}
+      {tab === "shops"      && <ShopsTab token={token} />}
+      {tab === "returns"    && <ReturnsTab token={token} />}
       {tab === "exemptions" && <ExemptionsTab adminId={user.id} token={token} />}
     </div>
   );
 }
 
 // ─────────────────────────────────────────────
-//  Pestaña: Verificación de comercios
+//  Pestaña: Verificación de comercios (usa /api/admin/shops)
 // ─────────────────────────────────────────────
-function ShopsTab({ userId }: { userId: string }) {
-  const [requests,   setRequests]   = useState<BusinessRequest[]>([]);
-  const [loading,    setLoading]    = useState(true);
-  const [filter,     setFilter]     = useState<"all" | "pending" | "approved">("pending");
-  const [confirming, setConfirming] = useState<{ id: string; approve: boolean } | null>(null);
+function ShopsTab({ token }: { token: string | null }) {
+  const [shops,   setShops]   = useState<AdminShop[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filter,  setFilter]  = useState<"pending" | "verified" | "all">("pending");
+  const [acting,  setActing]  = useState<string | null>(null);
 
   useEffect(() => {
-    getPublicClient().from("users").select("*").eq("commercial_type", "business")
-      .order("updated_at", { ascending: false })
-      .then(({ data }) => { setRequests((data as BusinessRequest[]) ?? []); setLoading(false); });
-  }, []);
+    if (!token) return;
+    fetch("/api/admin/shops", { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => r.json())
+      .then((d) => { setShops(d.shops ?? []); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, [token]);
 
-  async function handleVerify(id: string, approve: boolean) {
-    await getPublicClient().from("users").update({ verified: approve }).eq("id", id);
-    setRequests((prev) => prev.map((r) => r.id === id ? { ...r, verified: approve } : r));
-    setConfirming(null);
+  async function setStatus(shopId: string, status: "verified" | "suspended") {
+    setActing(shopId);
+    try {
+      const res = await fetch("/api/admin/shops", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ shopId, status }),
+      });
+      if (res.ok) {
+        setShops((prev) => prev.map((s) => s.id === shopId ? { ...s, status, active: status === "verified" } : s));
+      } else {
+        const d = await res.json(); alert(d.error ?? "No se pudo actualizar");
+      }
+    } finally { setActing(null); }
   }
 
-  const pending      = requests.filter((r) => r.verified === null || r.verified === undefined);
-  const approved     = requests.filter((r) => r.verified === true);
-  const approvedToday = approved.filter((r) => new Date(r.updated_at).toDateString() === new Date().toDateString());
-  const filtered     = filter === "pending" ? pending : filter === "approved" ? approved : requests;
-  const counts       = { pending: pending.length, approved: approved.length, all: requests.length };
-  const FILTER_LABELS = { pending: "Pendientes", approved: "Aprobados", all: "Todos" };
+  const pending      = shops.filter((s) => s.status === "pending");
+  const verified     = shops.filter((s) => s.status === "verified");
+  const verifiedToday = verified.filter((s) => new Date(s.created_at).toDateString() === new Date().toDateString());
+  const filtered     = filter === "pending" ? pending : filter === "verified" ? verified : shops;
+  const counts       = { pending: pending.length, verified: verified.length, all: shops.length };
+  const LABELS = { pending: "Pendientes", verified: "Verificados", all: "Todos" };
 
   return (
     <div className="space-y-5">
-      {/* Estadísticas */}
       <div className="grid grid-cols-3 gap-4">
         {[
-          { label: "Total solicitudes",    value: requests.length,        borderClass: "border-slate-100",   iconColor: "text-slate-400",   bgClass: "bg-slate-50" },
-          { label: "Pendientes de revisión",value: pending.length,         borderClass: "border-amber-100",   iconColor: "text-amber-500",   bgClass: "bg-amber-50" },
-          { label: "Aprobadas hoy",         value: approvedToday.length,   borderClass: "border-emerald-100", iconColor: "text-emerald-500", bgClass: "bg-emerald-50" },
-        ].map(({ label, value, borderClass, iconColor, bgClass }) => (
-          <div key={label} className={`bg-white rounded-2xl border ${borderClass} shadow-sm p-4 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 cursor-default`}>
+          { label: "Total comercios",        value: shops.length },
+          { label: "Pendientes de revisión", value: pending.length },
+          { label: "Verificados",            value: verified.length },
+        ].map(({ label, value }) => (
+          <div key={label} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
             <p className="text-2xl font-bold text-slate-900">{value}</p>
             <p className="text-xs text-slate-400 mt-0.5">{label}</p>
           </div>
         ))}
       </div>
 
-      {/* Filtros */}
       <div className="flex items-center gap-2">
-        {(["pending", "approved", "all"] as const).map((f) => (
+        {(["pending", "verified", "all"] as const).map((f) => (
           <button key={f} onClick={() => setFilter(f)}
             className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
-              filter === f ? "bg-indigo-600 text-white shadow-sm shadow-indigo-200" : "bg-white text-slate-600 hover:bg-slate-50 hover:shadow-sm border border-slate-200 transition-all duration-150"
+              filter === f ? "bg-indigo-600 text-white shadow-sm shadow-indigo-200" : "bg-white text-slate-600 hover:bg-slate-50 border border-slate-200"
             }`}>
-            {FILTER_LABELS[f]}
-            <span className={`text-xs font-bold px-1.5 py-0.5 rounded-md ${filter === f ? "bg-white/20 text-white" : "bg-slate-100 text-slate-500"}`}>
-              {counts[f]}
-            </span>
+            {LABELS[f]}
+            <span className={`text-xs font-bold px-1.5 py-0.5 rounded-md ${filter === f ? "bg-white/20 text-white" : "bg-slate-100 text-slate-500"}`}>{counts[f]}</span>
           </button>
         ))}
       </div>
 
-      {/* Modal confirmación */}
-      {confirming && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-xl p-6 w-80 text-center">
-            <h3 className="text-base font-bold text-slate-800 mb-1">
-              {confirming.approve ? "¿Aprobar comercio?" : "¿Rechazar solicitud?"}
-            </h3>
-            <p className="text-sm text-slate-400 mb-5">
-              {confirming.approve ? "El comercio quedará verificado y visible en Localia." : "La solicitud quedará rechazada."}
-            </p>
-            <div className="flex gap-2">
-              <button onClick={() => setConfirming(null)} className="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50">Cancelar</button>
-              <button onClick={() => handleVerify(confirming.id, confirming.approve)}
-                className={`flex-1 px-4 py-2.5 rounded-xl text-sm font-bold text-white ${confirming.approve ? "bg-emerald-600 hover:bg-emerald-700" : "bg-red-500 hover:bg-red-600"}`}>
-                {confirming.approve ? "Aprobar" : "Rechazar"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Lista */}
       {loading ? (
         <div className="flex items-center justify-center py-16"><div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" /></div>
       ) : filtered.length === 0 ? (
-        <div className="text-center py-16 text-slate-400">
-          <p className="font-semibold">{filter === "pending" ? "No hay solicitudes pendientes" : "Sin resultados"}</p>
+        <div className="text-center py-16 text-slate-400"><p className="font-semibold">{filter === "pending" ? "No hay comercios pendientes" : "Sin resultados"}</p></div>
+      ) : (
+        <div className="space-y-3">
+          {filtered.map((s) => {
+            const initials = (s.name ?? "?").slice(0, 2).toUpperCase();
+            const color    = nameToColor(s.name ?? "?");
+            const date     = new Date(s.created_at).toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" });
+            return (
+              <div key={s.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 flex items-start gap-4 hover:border-slate-200 hover:shadow-md transition-all">
+                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-lg font-bold shrink-0 ${color.bg} ${color.text}`}>{initials}</div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                    <h2 className="font-bold text-slate-900 text-base">{s.name}</h2>
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${SHOP_BADGE[s.status] ?? SHOP_BADGE.pending}`}>{SHOP_LABEL[s.status] ?? s.status}</span>
+                  </div>
+                  <p className="text-sm text-slate-400">{s.owner?.email ?? "—"}</p>
+                  {s.phone   && <p className="text-xs text-slate-500 mt-1">{s.phone}</p>}
+                  {s.address && <p className="text-xs text-slate-500">{s.address}</p>}
+                  <p className="text-xs text-slate-300 mt-2">Alta del {date}</p>
+                </div>
+                <div className="flex flex-col gap-2 shrink-0">
+                  {s.status !== "verified" && (
+                    <button onClick={() => setStatus(s.id, "verified")} disabled={acting === s.id}
+                      className="px-4 py-2 bg-emerald-600 text-white text-sm font-semibold rounded-xl hover:bg-emerald-700 active:scale-95 transition-all disabled:opacity-50">
+                      {acting === s.id ? "..." : "Verificar"}
+                    </button>
+                  )}
+                  {s.status !== "suspended" && (
+                    <button onClick={() => setStatus(s.id, "suspended")} disabled={acting === s.id}
+                      className="px-4 py-2 bg-white text-red-500 text-sm font-semibold rounded-xl hover:bg-red-50 border border-red-100 transition-all disabled:opacity-50">
+                      Suspender
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
+//  Pestaña: Devoluciones (admin override)
+// ─────────────────────────────────────────────
+function ReturnsTab({ token }: { token: string | null }) {
+  const [rows,    setRows]    = useState<AdminReturn[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filter,  setFilter]  = useState<"pending" | "all">("pending");
+  const [acting,  setActing]  = useState<string | null>(null);
+
+  function load() {
+    if (!token) return;
+    fetch("/api/returns", { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => r.json())
+      .then((d) => { setRows(d.returns ?? []); setLoading(false); })
+      .catch(() => setLoading(false));
+  }
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [token]);
+
+  async function override(id: string, action: "accept" | "reject") {
+    let note: string | undefined;
+    if (action === "reject") { note = window.prompt("Motivo del rechazo:") ?? undefined; if (note === undefined) return; }
+    else if (!window.confirm("¿Aceptar y reembolsar esta devolución?")) return;
+    setActing(id);
+    try {
+      const res = await fetch("/api/returns", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ returnId: id, action, note }),
+      });
+      const d = await res.json();
+      if (!res.ok) alert(d.error ?? "Error");
+      else if (d.refundError) alert("Aceptada, pero el reembolso automático falló. Reembolsa manualmente en Stripe.");
+      load();
+    } finally { setActing(null); }
+  }
+
+  const pending  = rows.filter((r) => r.status === "pending");
+  const filtered = filter === "pending" ? pending : rows;
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center gap-2">
+        {(["pending", "all"] as const).map((f) => (
+          <button key={f} onClick={() => setFilter(f)}
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
+              filter === f ? "bg-indigo-600 text-white shadow-sm shadow-indigo-200" : "bg-white text-slate-600 hover:bg-slate-50 border border-slate-200"
+            }`}>
+            {f === "pending" ? "Pendientes" : "Todas"}
+            <span className={`text-xs font-bold px-1.5 py-0.5 rounded-md ${filter === f ? "bg-white/20 text-white" : "bg-slate-100 text-slate-500"}`}>{f === "pending" ? pending.length : rows.length}</span>
+          </button>
+        ))}
+      </div>
+
+      {loading ? (
+        <div className="flex items-center justify-center py-16"><div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" /></div>
+      ) : filtered.length === 0 ? (
+        <div className="text-center py-16 text-slate-400"><RotateCcw className="w-10 h-10 mx-auto mb-3 opacity-30" /><p className="font-semibold">No hay devoluciones {filter === "pending" ? "pendientes" : "registradas"}</p></div>
       ) : (
         <div className="space-y-3">
           {filtered.map((r) => {
-            const status   = r.verified === true ? "approved" : r.verified === false ? "rejected" : "pending";
-            const initials = (r.business_name ?? r.email ?? "?").slice(0, 2).toUpperCase();
-            const color    = nameToColor(r.business_name ?? r.email ?? "?");
-            const date     = new Date(r.updated_at).toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" });
+            const buyerName = r.buyer?.display_name || r.buyer?.email?.split("@")[0] || "Cliente";
             return (
-              <div key={r.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 flex items-start gap-4 hover:border-slate-200 hover:shadow-md transition-all duration-200">
-                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-lg font-bold shrink-0 ${color.bg} ${color.text}`}>
-                  {initials}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap mb-0.5">
-                    <h2 className="font-bold text-slate-900 text-base">{r.business_name ?? "(sin nombre)"}</h2>
-                    {status === "pending"  && <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 ring-1 ring-amber-200">Pendiente</span>}
-                    {status === "approved" && <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200">Verificado</span>}
-                    {status === "rejected" && <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-red-50 text-red-600 ring-1 ring-red-200">Rechazado</span>}
+              <div key={r.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap mb-1">
+                      <span className="font-black text-slate-600 font-mono text-sm">#{r.order_id.slice(0, 8).toUpperCase()}</span>
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${RET_BADGE[r.status] ?? RET_BADGE.pending}`}>{RET_LABEL[r.status] ?? r.status}</span>
+                    </div>
+                    <p className="text-sm font-bold text-slate-800">{buyerName} · <span className="font-normal text-slate-400">{r.shop?.name ?? ""}</span></p>
+                    <p className="text-sm text-slate-600 mt-1"><span className="font-semibold">Motivo:</span> {r.reason}</p>
+                    {r.resolution_note && <p className="text-xs text-slate-400 mt-1 italic">Nota: {r.resolution_note}</p>}
                   </div>
-                  <p className="text-sm text-slate-400">{r.email}</p>
-                  {r.phone    && <p className="text-xs text-slate-500 mt-1">{r.phone}</p>}
-                  {r.address  && <p className="text-xs text-slate-500">{r.address}</p>}
-                  <p className="text-xs text-slate-300 mt-2">Solicitud del {date}</p>
-                </div>
-                {status === "pending" && (
-                  <div className="flex flex-col gap-2 shrink-0">
-                    <button onClick={() => setConfirming({ id: r.id, approve: true })}
-                      className="px-4 py-2 bg-emerald-600 text-white text-sm font-semibold rounded-xl hover:bg-emerald-700 active:scale-95 transition-all duration-150">
-                      Aprobar
-                    </button>
-                    <button onClick={() => setConfirming({ id: r.id, approve: false })}
-                      className="px-4 py-2 bg-white text-red-500 text-sm font-semibold rounded-xl hover:bg-red-50 border border-red-100 transition-all duration-150">
-                      Rechazar
-                    </button>
+                  <div className="text-right shrink-0">
+                    <p className="text-lg font-black text-slate-900">{Number(r.refund_amount ?? 0).toFixed(2)} €</p>
+                    {r.status === "pending" && (
+                      <div className="mt-2 flex flex-col gap-1.5">
+                        <button onClick={() => override(r.id, "accept")} disabled={acting === r.id} className="px-3 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50">{acting === r.id ? "..." : "Aceptar y reembolsar"}</button>
+                        <button onClick={() => override(r.id, "reject")} disabled={acting === r.id} className="px-3 py-1.5 bg-white border border-red-200 text-red-600 text-xs font-bold rounded-lg hover:bg-red-50 transition-colors disabled:opacity-50">Rechazar</button>
+                      </div>
+                    )}
                   </div>
-                )}
+                </div>
               </div>
             );
           })}
@@ -290,7 +377,7 @@ function ExemptionsTab({ adminId, token }: { adminId: string; token: string | nu
       getPublicClient().from("shops").select("id, name, slug").eq("active", true).order("name"),
     ]).then(([exData, { data: shopData }]) => {
       setExemptions(exData.exemptions ?? []);
-      setShops(shopData ?? []);
+      setShops((shopData as Shop[]) ?? []);
       setLoading(false);
     });
   }, [token]);
@@ -341,7 +428,6 @@ function ExemptionsTab({ adminId, token }: { adminId: string; token: string | nu
         </button>
       </div>
 
-      {/* Formulario de nueva exención */}
       {showForm && (
         <form onSubmit={handleCreate} className="bg-indigo-50 border border-indigo-100 rounded-2xl p-5 space-y-4">
           <h3 className="text-sm font-bold text-indigo-800">Conceder exención</h3>
@@ -386,7 +472,6 @@ function ExemptionsTab({ adminId, token }: { adminId: string; token: string | nu
         </form>
       )}
 
-      {/* Lista de exenciones */}
       {loading ? (
         <div className="flex items-center justify-center py-12"><div className="w-7 h-7 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" /></div>
       ) : exemptions.length === 0 ? (
