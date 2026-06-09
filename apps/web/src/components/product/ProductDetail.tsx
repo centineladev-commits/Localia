@@ -18,12 +18,16 @@ import {
   MapPin,
   Phone,
   Clock,
+  Truck,
+  ShieldCheck,
 } from "lucide-react";
 import type { Product, Shop } from "@/lib/types";
 import { useCartStore } from "@/store/cart.store";
 import { useAuthStore } from "@/store/auth.store";
 import { ChatButton } from "@/components/chat/ChatButton";
 import { getPublicClient } from "@/lib/db";
+import { ProductCard } from "@/components/catalog/ProductCard";
+import type { CatalogProduct } from "@/app/api/catalog/route";
 
 /** Retrieve the current Supabase session access token. */
 async function getAccessToken(): Promise<string | null> {
@@ -45,6 +49,7 @@ export function ProductDetail({ product, shop }: { product: Product; shop: Shop 
   const [reserveNote, setReserveNote]    = useState("");
   const [reserving, setReserving]        = useState(false);
   const [reserveOk, setReserveOk]        = useState(false);
+  const [related, setRelated]            = useState<CatalogProduct[]>([]);
 
   const router = useRouter();
 
@@ -131,6 +136,19 @@ export function ProductDetail({ product, shop }: { product: Product; shop: Shop 
       setReserving(false);
     }
   }
+
+  // Productos relacionados (mismo catálogo, excluyendo el actual)
+  useEffect(() => {
+    const params = new URLSearchParams({ limit: "12" });
+    if (product.categoryId) params.set("cat", product.categoryId);
+    fetch(`/api/catalog?${params}`)
+      .then((r) => r.json())
+      .then((d) => {
+        const items: CatalogProduct[] = (d.products ?? []).filter((p: CatalogProduct) => p.id !== product.id);
+        setRelated(items.slice(0, 5));
+      })
+      .catch(() => {});
+  }, [product.id, product.categoryId]);
 
   const totalPrice = (product.price * qty).toFixed(2);
 
@@ -382,6 +400,38 @@ export function ProductDetail({ product, shop }: { product: Product; shop: Shop 
 
         </div>
       </div>
+
+      {/* ── Garantías ── */}
+      <div className="mt-12 grid grid-cols-1 sm:grid-cols-3 gap-3">
+        {[
+          { icon: Truck,       title: "Envío a domicilio o recogida", text: "Elige cómo recibirlo en el checkout" },
+          { icon: CheckCircle, title: "Devolución en 14 días",        text: "Si no es lo que esperabas, devuélvelo" },
+          { icon: ShieldCheck, title: "Pago 100% seguro",             text: "Procesado de forma segura con Stripe" },
+        ].map(({ icon: Icon, title, text }) => (
+          <div key={title} className="flex items-start gap-3 p-4 bg-white rounded-2xl border border-gray-100">
+            <div className="w-9 h-9 rounded-xl bg-indigo-50 flex items-center justify-center shrink-0">
+              <Icon className="w-4 h-4 text-indigo-600" />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-gray-800">{title}</p>
+              <p className="text-xs text-gray-400 mt-0.5">{text}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* ── Productos relacionados ── */}
+      {related.length > 0 && (
+        <div className="mt-12">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-black text-gray-900">También te puede interesar</h2>
+            <Link href="/" className="text-sm font-bold text-indigo-600 hover:underline">Ver todo el catálogo →</Link>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
+            {related.map((p) => <ProductCard key={p.id} product={p} />)}
+          </div>
+        </div>
+      )}
 
       {/* Modal de reserva */}
       {showReserve && (

@@ -3,6 +3,7 @@ import { getAdminClient } from "@/lib/db";
 import { getProductById, getShopByProductId } from "@/lib/demo-data";
 import { SHOP_CATEGORY_COLORS } from "@/lib/constants";
 import { ProductDetail } from "@/components/product/ProductDetail";
+import { PageWrapper } from "@/components/layout/PageWrapper";
 import type { Product, Shop } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -56,8 +57,10 @@ export default async function ProductPage({ params }: { params: { id: string } }
   }
 
   return (
-    <div className="h-full overflow-y-auto bg-gray-50">
-      <ProductDetail product={product!} shop={shop!} />
-    </div>
+    <PageWrapper>
+      <div className="bg-gray-50 min-h-full">
+        <ProductDetail product={product!} shop={shop!} />
+      </div>
+    </PageWrapper>
   );
 }

@@ -12,6 +12,7 @@ import {
   MessageCircle,
   LogOut,
   ShoppingBag,
+  ShieldCheck,
 } from "lucide-react";
 import { useAuthStore } from "@/store/auth.store";
 import { CartButton } from "@/components/cart/CartButton";
@@ -20,33 +21,47 @@ import { getPublicClient } from "@/lib/db";
 const NAV_ITEMS = [
   { href: "/",        label: "Catálogo"  },
   { href: "/mapa",    label: "Mapa"      },
+  { href: "/vendedor/solicitar", label: "Vender" },
   { href: "/nosotros",label: "Nosotros"  },
   { href: "/contacto",label: "Contacto"  },
 ];
 
+// Ítems base del menú de usuario (los específicos de rol se añaden dinámicamente)
 const USER_MENU = [
-  { href: "/perfil",             icon: User,          label: "Mi perfil"       },
-  { href: "/mis-pedidos",        icon: Package,       label: "Mis pedidos"     },
-  { href: "/wishlist",           icon: Heart,         label: "Lista de deseos" },
-  { href: "/reservas",           icon: Bookmark,      label: "Mis reservas"    },
-  { href: "/dashboard/comercio", icon: Store,         label: "Panel comercio"  },
-  { href: "/chat",               icon: MessageCircle, label: "Mensajes"        },
+  { href: "/perfil",      icon: User,          label: "Mi perfil"       },
+  { href: "/mis-pedidos", icon: Package,       label: "Mis pedidos"     },
+  { href: "/wishlist",    icon: Heart,         label: "Lista de deseos" },
+  { href: "/reservas",    icon: Bookmark,      label: "Mis reservas"    },
+  { href: "/chat",        icon: MessageCircle, label: "Mensajes"        },
 ];
 
 export function Header() {
   const { user, loading, openAuthModal } = useAuthStore();
   const pathname = usePathname();
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [role, setRole] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!user) { setAvatarUrl(null); return; }
+    if (!user) { setAvatarUrl(null); setRole(null); return; }
     getPublicClient()
       .from("users")
-      .select("avatar_url")
+      .select("avatar_url, role")
       .eq("id", user.id)
       .single()
-      .then(({ data }) => setAvatarUrl(data?.avatar_url ?? null));
+      .then(({ data }) => {
+        setAvatarUrl((data as any)?.avatar_url ?? null);
+        setRole((data as any)?.role ?? null);
+      });
   }, [user]);
+
+  // Ítems de menú según rol: vendedor/admin → Panel comercio; resto → Vender;
+  // admin → Panel admin.
+  const roleItems =
+    role === "seller" || role === "admin"
+      ? [{ href: "/dashboard/comercio", icon: Store, label: "Panel comercio" }]
+      : [{ href: "/vendedor/solicitar", icon: Store, label: "Vender en Localia" }];
+  if (role === "admin") roleItems.push({ href: "/dashboard/admin", icon: ShieldCheck, label: "Panel admin" });
+  const userMenu = [...USER_MENU, ...roleItems];
 
   async function handleSignOut() {
     await getPublicClient().auth.signOut();
@@ -115,7 +130,7 @@ export function Header() {
                     <p className="text-sm font-bold text-slate-800 mt-0.5 truncate">{user.email}</p>
                   </div>
 
-                  {USER_MENU.map(({ href, icon: Icon, label }) => (
+                  {userMenu.map(({ href, icon: Icon, label }) => (
                     <Link
                       key={href}
                       href={href}
