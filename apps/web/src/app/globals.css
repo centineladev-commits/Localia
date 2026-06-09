@@ -2,7 +2,9 @@
 @tailwind components;
 @tailwind utilities;
 
-/* maplibre-gl map styles moved to /mapa layout — only loads on the map page */
+/* maplibre-gl map styles — must stay here (dynamic import with ssr:false
+   cannot resolve CSS; globals.css is the only reliable loading point) */
+@import 'maplibre-gl/dist/maplibre-gl.css';
 
 @layer base {
   html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
