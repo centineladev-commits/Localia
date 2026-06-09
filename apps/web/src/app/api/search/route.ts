@@ -42,6 +42,11 @@ function normalize(s: string) {
   return s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 }
 
+/** Sanea el término antes de interpolarlo en el DSL .or()/.ilike() de PostgREST. */
+function safeTerm(q: string): string {
+  return q.replace(/[,.()*:%_\\"'\n\r]/g, " ").replace(/\s+/g, " ").trim().slice(0, 80);
+}
+
 /** Demo fallback: filtra comercios y productos por término libre + expansión de categorías */
 function demoSearch(q: string, expandedCategories: string[]): { shops: SearchShop[]; products: SearchProduct[] } {
   const qn = normalize(q);
@@ -116,7 +121,7 @@ export async function GET(req: NextRequest) {
         .select("id, name, slug, description, address, cities(name), shop_categories(name, slug, color), logo_url")
         .eq("active", true)
         .eq("status", "verified")
-        .ilike("name", `%${q}%`)
+        .ilike("name", `%${safeTerm(q)}%`)
         .limit(limit);
       if (cityId) q2 = q2.eq("city_id", cityId);
       const { data } = await q2;
@@ -178,7 +183,8 @@ export async function GET(req: NextRequest) {
       if (results.length < 4) {
         let q2 = base();
         if (cityId) q2 = q2.eq("city_id", cityId);
-        const { data } = await q2.or(`name.ilike.%${q}%,description.ilike.%${q}%`);
+        const t = safeTerm(q);
+        const { data } = await q2.or(`name.ilike.%${t}%,description.ilike.%${t}%`);
         const seen = new Set(results.map((r: any) => r.id));
         results = [...results, ...(data ?? []).filter((r: any) => !seen.has(r.id))].slice(0, limit);
       }

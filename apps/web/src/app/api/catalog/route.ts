@@ -81,6 +81,16 @@ function demoFallback(params: {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/**
+ * Saneado del término de búsqueda antes de interpolarlo en el DSL de filtros de
+ * PostgREST (.or()/.ilike()). Elimina los caracteres con significado en ese DSL
+ * (comas, puntos, paréntesis, comodines %/_ , etc.) para evitar inyección de
+ * condiciones o errores. Mantiene letras (con tildes/ñ), números, espacios y -.
+ */
+function safeTerm(q: string): string {
+  return q.replace(/[,.()*:%_\\"'\n\r]/g, " ").replace(/\s+/g, " ").trim().slice(0, 80);
+}
+
 async function resolveCityId(supabase: ReturnType<typeof getAdminClient>, param: string): Promise<string | null> {
   if (!param) return null;
   if (UUID_RE.test(param)) return param;
@@ -150,7 +160,8 @@ export async function GET(req: NextRequest) {
       query = query.neq("city_id", cityId);
     }
 
-    if (q) query = query.or(`name.ilike.%${q}%,description.ilike.%${q}%`);
+    const term = safeTerm(q);
+    if (term) query = query.or(`name.ilike.%${term}%,description.ilike.%${term}%`);
     if (category) query = query.eq("shops.shop_categories.slug", category);
     if (priceMin != null) query = query.gte("price", priceMin);
     if (priceMax != null) query = query.lte("price", priceMax);

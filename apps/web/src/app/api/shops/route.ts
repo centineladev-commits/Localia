@@ -46,6 +46,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ shops: data ?? [] });
   } catch (err: any) {
     console.error("[GET /api/shops]", err);
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    // No filtrar el mensaje interno de Postgres/Supabase al cliente
+    return NextResponse.json({ error: "Error interno" }, { status: 500 });
   }
 }

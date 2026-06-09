@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { getAdminClient } from "@/lib/db";
-import { getRequestUser, isAdminUser } from "@/lib/auth-server";
+import { getRequestUser, isAdminUser, isRateLimited } from "@/lib/auth-server";
 import { sendReturnRequestedEmail, sendReturnResolvedEmail } from "@/lib/email";
 
 export const dynamic = "force-dynamic";
@@ -46,6 +46,11 @@ export async function POST(req: NextRequest) {
   try {
     const user = await getRequestUser(req);
     if (!user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+
+    // Rate limit best-effort por usuario (5 solicitudes/min) para evitar abuso
+    if (isRateLimited(`returns:${user.id}`, 5, 60_000)) {
+      return NextResponse.json({ error: "Demasiadas solicitudes. Espera un momento." }, { status: 429 });
+    }
 
     const { orderId, reason } = (await req.json()) as { orderId?: string; reason?: string };
     if (!orderId) return NextResponse.json({ error: "orderId requerido" }, { status: 400 });
