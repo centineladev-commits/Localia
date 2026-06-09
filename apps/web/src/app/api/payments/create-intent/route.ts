@@ -137,22 +137,30 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // Crear borrador de pedido con precios verificados
-    try {
-      await supabase.from("orders").insert({
-        buyer_user_id:     authUser.id,
-        shop_id:           shopId,
-        items:             verifiedItems,
-        subtotal,
-        platform_fee:      platformFee,
-        total:             grandTotal,
-        delivery_type:     deliveryMode,
-        delivery_address:  deliveryAddress ?? null,
-        stripe_payment_id: paymentIntent.id,
-        status:            "pending",
-      });
-    } catch (dbErr) {
-      console.error("[create-intent] DB insert error:", dbErr);
+    // Crear borrador de pedido con precios verificados ANTES de devolver el
+    // clientSecret. El cliente de Supabase NO lanza en error (lo devuelve en
+    // .error), así que hay que comprobarlo explícitamente. Si el pedido no se
+    // puede crear, cancelamos el PaymentIntent para NO cobrar sin pedido.
+    const { error: orderErr } = await supabase.from("orders").insert({
+      buyer_user_id:     authUser.id,
+      shop_id:           shopId,
+      items:             verifiedItems,
+      subtotal,
+      platform_fee:      platformFee,
+      total:             grandTotal,
+      delivery_type:     deliveryMode,
+      delivery_address:  deliveryMode === "local_delivery" ? (deliveryAddress ?? null) : null,
+      stripe_payment_id: paymentIntent.id,
+      status:            "pending",
+    });
+
+    if (orderErr) {
+      console.error("[create-intent] No se pudo crear el pedido:", orderErr);
+      try { await stripe.paymentIntents.cancel(paymentIntent.id); } catch {}
+      return NextResponse.json(
+        { error: "No se pudo crear el pedido. Inténtalo de nuevo." },
+        { status: 500 }
+      );
     }
 
     return NextResponse.json({

@@ -31,13 +31,23 @@ export async function POST(req: NextRequest) {
     const pi = event.data.object as Stripe.PaymentIntent;
     const meta = pi.metadata;
 
-    // 1. Marcar pedido como pagado
+    // 1. Marcar pedido como pagado — SOLO la primera vez (idempotencia).
+    //    Stripe reenvía webhooks; al condicionar el UPDATE a status='pending'
+    //    y comprobar si afectó alguna fila, evitamos decrementar stock y enviar
+    //    emails por duplicado en reentregas.
     const { data: order } = await supabase
       .from("orders")
       .update({ status: "paid", paid_at: new Date().toISOString() })
       .eq("stripe_payment_id", pi.id)
+      .eq("status", "pending")
       .select("id, buyer_user_id, shop_id, items, subtotal, platform_fee, total, delivery_type, delivery_address")
-      .single();
+      .maybeSingle();
+
+    if (!order) {
+      // Ya estaba pagado (reentrega) o el pedido no existe → no reprocesar.
+      console.log(`[webhook] ${pi.id} ya procesado o sin pedido asociado, omitido`);
+      return NextResponse.json({ received: true });
+    }
 
     console.log(`[webhook] Pedido pagado: ${pi.id} — ${(pi.amount / 100).toFixed(2)} €`);
 

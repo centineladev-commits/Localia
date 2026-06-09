@@ -97,9 +97,10 @@ export function CheckoutForm() {
       return;
     }
 
+    // Si Stripe no está configurado NO fingimos un pedido: mostramos error.
+    // (Antes hacía clearCart()+success → "venta fantasma" sin pedido ni cobro.)
     if (!process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY) {
-      clearCart();
-      setStep("success");
+      setIntentError("El pago no está disponible ahora mismo. Vuelve a intentarlo más tarde.");
       return;
     }
 
